@@ -168,3 +168,143 @@ export function buildWithdrawalsDailyPdf(
 export function withdrawalsDailyPdfFilename(date: string): string {
   return `retiros-diaria-${date}.pdf`;
 }
+
+// -----------------------------------------------------------------------------
+// Aggregate PDFs (monthly + annual).
+// -----------------------------------------------------------------------------
+
+type AggregateRow = { label: string; total: string; count: number };
+
+function buildAggregatePdf(
+  title: string,
+  subtitle: string,
+  firstColHeader: string,
+  rows: AggregateRow[],
+): Uint8Array {
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const marginX = 40;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(20);
+  doc.setTextColor(...ORANGE);
+  doc.text('Carestino Santa Fe', marginX, 60);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(...TEXT_DARK);
+  doc.text(title, marginX, 80);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(...TEXT_MUTED);
+  doc.text(subtitle, marginX, 96);
+
+  const generated = `Generado el ${formatLongDateInAppTZ(todayInAppTZ())}`;
+  const genWidth = doc.getTextWidth(generated);
+  doc.text(generated, pageWidth - marginX - genWidth, 96);
+
+  // Total card at top.
+  const totalSum = rows.reduce((acc, r) => acc + Number(r.total), 0);
+  const totalCount = rows.reduce((acc, r) => acc + r.count, 0);
+
+  const cardY = 120;
+  const cardW = pageWidth - marginX * 2;
+  const cardH = 56;
+  doc.setFillColor(...ORANGE);
+  doc.roundedRect(marginX, cardY, cardW, cardH, 6, 6, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(255, 255, 255);
+  doc.text('TOTAL DEL PERÍODO', marginX + 14, cardY + 18);
+  doc.setFontSize(20);
+  doc.text(formatARS(totalSum.toFixed(2)), marginX + 14, cardY + 42);
+  // Right-aligned count.
+  const countText = `${totalCount} retiro${totalCount === 1 ? '' : 's'}`;
+  const countW = doc.getTextWidth(countText);
+  doc.setFontSize(11);
+  doc.text(countText, pageWidth - marginX - 14 - countW, cardY + 42);
+
+  // Detail table.
+  const head = [[firstColHeader, 'Cantidad', 'Monto']];
+  const body: string[][] = rows.map((r) => [r.label, String(r.count), formatARS(r.total)]);
+
+  autoTable(doc, {
+    startY: cardY + cardH + 16,
+    margin: { left: marginX, right: marginX },
+    head,
+    body,
+    headStyles: {
+      fillColor: ORANGE,
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 9,
+      halign: 'left',
+    },
+    bodyStyles: {
+      fontSize: 9,
+      textColor: TEXT_DARK,
+      cellPadding: 4,
+    },
+    alternateRowStyles: { fillColor: ORANGE_LIGHT },
+    columnStyles: {
+      0: { cellWidth: 'auto' },
+      1: { halign: 'center', cellWidth: 70 },
+      2: { halign: 'right', cellWidth: 110 },
+    },
+    styles: { lineColor: BORDER, lineWidth: 0.5 },
+    didDrawPage: (data) => {
+      const pageCount = doc.getNumberOfPages();
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(...TEXT_MUTED);
+      const footer = `Página ${data.pageNumber} de ${pageCount}`;
+      const w = doc.getTextWidth(footer);
+      doc.text(footer, pageWidth - marginX - w, doc.internal.pageSize.getHeight() - 20);
+    },
+  });
+
+  if (body.length === 0) {
+    const finalY =
+      (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ??
+      cardY + cardH + 30;
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(10);
+    doc.setTextColor(...TEXT_MUTED);
+    doc.text('No hay retiros registrados en este período.', marginX, finalY + 16);
+  }
+
+  return new Uint8Array(doc.output('arraybuffer'));
+}
+
+export function buildWithdrawalsMonthlyPdf(
+  month: string,
+  rows: AggregateRow[],
+): Uint8Array {
+  return buildAggregatePdf(
+    'Retiros — Planilla mensual',
+    `Mes: ${month}`,
+    'Día',
+    rows,
+  );
+}
+
+export function buildWithdrawalsAnnualPdf(
+  year: number,
+  rows: AggregateRow[],
+): Uint8Array {
+  return buildAggregatePdf(
+    'Retiros — Planilla anual',
+    `Año: ${year}`,
+    'Mes',
+    rows,
+  );
+}
+
+export function withdrawalsMonthlyPdfFilename(month: string): string {
+  return `retiros-mensual-${month}.pdf`;
+}
+
+export function withdrawalsAnnualPdfFilename(year: number): string {
+  return `retiros-anual-${year}.pdf`;
+}

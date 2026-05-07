@@ -67,22 +67,36 @@ export default async function AnnualWithdrawalsPage({
           <h1 className="mt-2 text-2xl font-semibold tracking-tight">Retiros — Anual</h1>
           <p className="mt-1 text-sm text-muted-foreground">{year}</p>
         </div>
-        <form method="get" className="flex items-center gap-2">
-          <input
-            type="number"
-            name="year"
-            min="2020"
-            max="2100"
-            defaultValue={year}
-            className="h-9 w-24 rounded-input border border-input bg-background px-2 text-sm tabular-nums"
-          />
-          <button
-            type="submit"
-            className="h-9 rounded-input bg-muted px-3 text-xs font-medium hover:bg-muted/80"
+        <div className="flex items-center gap-2">
+          <form method="get" className="flex items-center gap-2">
+            <input
+              type="number"
+              name="year"
+              min="2020"
+              max="2100"
+              defaultValue={year}
+              className="h-9 w-24 rounded-input border border-input bg-background px-2 text-sm tabular-nums"
+            />
+            <button
+              type="submit"
+              className="h-9 rounded-input bg-muted px-3 text-xs font-medium hover:bg-muted/80"
+            >
+              Ver
+            </button>
+          </form>
+          <a
+            href={`/api/export/withdrawals?period=annual&year=${year}&format=xlsx`}
+            className="inline-flex h-9 items-center rounded-input border border-border bg-background px-3 text-xs font-medium hover:bg-muted"
           >
-            Ver
-          </button>
-        </form>
+            Excel
+          </a>
+          <a
+            href={`/api/export/withdrawals?period=annual&year=${year}&format=pdf`}
+            className="inline-flex h-9 items-center rounded-input border border-border bg-background px-3 text-xs font-medium hover:bg-muted"
+          >
+            PDF
+          </a>
+        </div>
       </header>
 
       <div className="mb-8 rounded-card border border-primary/30 bg-primary/5 p-5 text-center">

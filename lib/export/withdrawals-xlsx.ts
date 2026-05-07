@@ -174,3 +174,141 @@ export async function buildWithdrawalsDailyXlsx(
 export function withdrawalsDailyFilename(date: string): string {
   return `retiros-diaria-${date}.xlsx`;
 }
+
+// -----------------------------------------------------------------------------
+// Aggregate exports (monthly + annual). Shape: one row per day or per month.
+// -----------------------------------------------------------------------------
+
+type AggregateRow = { label: string; total: string; count: number };
+
+function buildAggregateSheet(
+  wb: ExcelJS.Workbook,
+  title: string,
+  subtitle: string,
+  firstColHeader: string,
+  rows: AggregateRow[],
+): void {
+  const ws = wb.addWorksheet('Resumen', {
+    views: [{ showGridLines: false, state: 'frozen', ySplit: 6 }],
+    properties: { defaultRowHeight: 18 },
+  });
+  ws.columns = [{ width: 18 }, { width: 16 }, { width: 18 }];
+
+  ws.mergeCells('A1:C1');
+  ws.getCell('A1').value = 'Carestino Santa Fe';
+  ws.getCell('A1').font = { name: 'Calibri', size: 18, bold: true, color: { argb: BRAND_ORANGE } };
+  ws.getRow(1).height = 28;
+
+  ws.mergeCells('A2:C2');
+  ws.getCell('A2').value = title;
+  ws.getCell('A2').font = { name: 'Calibri', size: 12, bold: true, color: { argb: TEXT_DARK } };
+
+  ws.mergeCells('A3:C3');
+  ws.getCell('A3').value = subtitle;
+  ws.getCell('A3').font = { name: 'Calibri', size: 11, color: { argb: TEXT_MUTED } };
+
+  // Total row.
+  const totalSum = rows.reduce((acc, r) => acc + Number(r.total), 0);
+  const totalCount = rows.reduce((acc, r) => acc + r.count, 0);
+
+  const totalRow = ws.getRow(4);
+  totalRow.values = ['Total del período', totalCount, totalSum];
+  totalRow.height = 22;
+  totalRow.eachCell((cell, col) => {
+    cell.font = { bold: true, color: { argb: BRAND_ORANGE } };
+    cell.alignment = {
+      vertical: 'middle',
+      horizontal: col === 1 ? 'left' : 'right',
+      indent: 1,
+    };
+    if (col === 3) cell.numFmt = MONEY_FMT;
+    cell.border = thinBorder;
+  });
+
+  // Header row.
+  const header = ws.getRow(6);
+  header.values = [firstColHeader, 'Cantidad', 'Monto'];
+  header.height = 22;
+  header.eachCell((cell, col) => {
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: BRAND_ORANGE } };
+    cell.alignment = {
+      vertical: 'middle',
+      horizontal: col === 3 ? 'right' : col === 2 ? 'center' : 'left',
+      indent: 1,
+    };
+    cell.border = thinBorder;
+  });
+
+  rows.forEach((r, i) => {
+    const row = ws.getRow(7 + i);
+    row.values = [r.label, r.count, Number(r.total)];
+    row.height = 20;
+    if (i % 2 === 1) {
+      const fill: ExcelJS.FillPattern = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: BRAND_ORANGE_LIGHT },
+      };
+      row.eachCell({ includeEmpty: true }, (c) => {
+        c.fill = fill;
+      });
+    }
+    row.eachCell({ includeEmpty: true }, (cell, col) => {
+      cell.font = { color: { argb: TEXT_DARK } };
+      cell.border = thinBorder;
+      if (col === 3) {
+        cell.alignment = { vertical: 'middle', horizontal: 'right', indent: 1 };
+        cell.numFmt = MONEY_FMT;
+      } else if (col === 2) {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      } else {
+        cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+      }
+    });
+  });
+}
+
+export async function buildWithdrawalsMonthlyXlsx(
+  month: string,
+  rows: AggregateRow[],
+): Promise<Uint8Array> {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Carestino Santa Fe';
+  wb.created = new Date();
+  buildAggregateSheet(
+    wb,
+    'Retiros — Planilla mensual',
+    `Mes: ${month}`,
+    'Día',
+    rows,
+  );
+  const buf = await wb.xlsx.writeBuffer();
+  return new Uint8Array(buf as ArrayBuffer);
+}
+
+export async function buildWithdrawalsAnnualXlsx(
+  year: number,
+  rows: AggregateRow[],
+): Promise<Uint8Array> {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Carestino Santa Fe';
+  wb.created = new Date();
+  buildAggregateSheet(
+    wb,
+    'Retiros — Planilla anual',
+    `Año: ${year}`,
+    'Mes',
+    rows,
+  );
+  const buf = await wb.xlsx.writeBuffer();
+  return new Uint8Array(buf as ArrayBuffer);
+}
+
+export function withdrawalsMonthlyFilename(month: string): string {
+  return `retiros-mensual-${month}.xlsx`;
+}
+
+export function withdrawalsAnnualFilename(year: number): string {
+  return `retiros-anual-${year}.xlsx`;
+}
