@@ -1,4 +1,5 @@
 import Image from 'next/image';
+import Link from 'next/link';
 import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/nextjs';
 import { auth } from '@clerk/nextjs/server';
 
@@ -76,6 +77,15 @@ export default async function HomePage() {
                   : 'Falta setear publicMetadata.role = "super_admin" en Clerk.'}
               </p>
             </div>
+
+            {roleOk && (
+              <Link
+                href="/ventas/nueva"
+                className="mt-6 inline-flex items-center justify-center rounded-input bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              >
+                Nueva venta →
+              </Link>
+            )}
           </SignedIn>
         </div>
       </div>
