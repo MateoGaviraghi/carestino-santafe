@@ -23,7 +23,7 @@ import { Trash2 } from 'lucide-react';
 
 import { createSale, type ActionError } from '@/app/actions/sales';
 import { createSaleSchema, type CreateSaleInput } from '@/lib/validators/sale';
-import { safeDecimal } from '@/lib/money';
+import { formatARS, safeDecimal } from '@/lib/money';
 import { PAYMENT_METHODS, type PaymentMethod } from '@/db/schema';
 import type { CardBrandOption } from '@/lib/queries/card-brands';
 import { cn } from '@/lib/utils';
@@ -31,6 +31,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
+import { SuccessToast } from '@/components/ui/success-toast';
+import { SaleConfirmDialog } from '@/components/sales/sale-confirm-dialog';
 
 const METHOD_LABEL: Record<PaymentMethod, string> = {
   efectivo: 'Efectivo',
@@ -66,10 +68,12 @@ type Props = { cardBrands: CardBrandOption[] };
 export function SaleForm({ cardBrands }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [serverMessage, setServerMessage] = useState<{
-    type: 'success' | 'error';
-    text: string;
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successToast, setSuccessToast] = useState<{
+    amount: string;
+    saleId: string;
   } | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<CreateSaleInput | null>(null);
   const totalInputRef = useRef<HTMLInputElement | null>(null);
 
   const form = useForm<CreateSaleInput>({
@@ -116,36 +120,40 @@ export function SaleForm({ cardBrands }: Props) {
     }
   };
 
+  // Submit opens the confirm dialog (instead of saving directly), so the
+  // cashier always reviews what's about to be persisted.
   const onSubmit = handleSubmit(
     (data) => {
-      setServerMessage(null);
-      startTransition(async () => {
-        const result = await createSale(data);
-        if (result.ok) {
-          setServerMessage({
-            type: 'success',
-            text: `Venta registrada (#${result.data.saleId.slice(0, 8)}).`,
-          });
-          reset(EMPTY_FORM);
-          totalInputRef.current?.focus();
-          router.refresh();
-        } else {
-          setServerMessage({
-            type: 'error',
-            text: ACTION_MESSAGE[result.error] + (result.message ? ` — ${result.message}` : ''),
-          });
-        }
-      });
+      setErrorMessage(null);
+      setPendingConfirm(data);
     },
     () => {
-      setServerMessage({
-        type: 'error',
-        text: 'Revisá los campos marcados.',
-      });
+      setErrorMessage('Revisá los campos marcados.');
     },
   );
 
-  const fmt = (d: Decimal): string => d.toFixed(2);
+  // Final commit — fires when the user clicks "Confirmar venta" in the dialog.
+  const handleConfirm = () => {
+    if (!pendingConfirm) return;
+    const data = pendingConfirm;
+    startTransition(async () => {
+      const result = await createSale(data);
+      if (result.ok) {
+        setPendingConfirm(null);
+        setSuccessToast({ amount: data.totalAmount, saleId: result.data.saleId });
+        reset(EMPTY_FORM);
+        totalInputRef.current?.focus();
+        router.refresh();
+      } else {
+        setPendingConfirm(null);
+        setErrorMessage(
+          ACTION_MESSAGE[result.error] + (result.message ? ` — ${result.message}` : ''),
+        );
+      }
+    });
+  };
+
+  const fmt = (d: Decimal): string => formatARS(d);
 
   return (
     <form onSubmit={onSubmit} className="space-y-6" aria-busy={isPending}>
@@ -166,6 +174,9 @@ export function SaleForm({ cardBrands }: Props) {
             register('totalAmount').ref(el);
           }}
         />
+        {totalDecimal.gt(0) && (
+          <p className="text-xs text-muted-foreground tabular-nums">{fmt(totalDecimal)}</p>
+        )}
         {formState.errors.totalAmount && (
           <p className="text-xs text-destructive">{formState.errors.totalAmount.message}</p>
         )}
@@ -227,6 +238,12 @@ export function SaleForm({ cardBrands }: Props) {
                       setValueAs: (v) => (typeof v === 'string' ? v.trim() : v),
                     })}
                   />
+                  {(() => {
+                    const d = safeDecimal(payments?.[index]?.amount);
+                    return d && d.gt(0) ? (
+                      <p className="mt-1 text-xs text-muted-foreground tabular-nums">{fmt(d)}</p>
+                    ) : null;
+                  })()}
                   {paymentErrors?.amount && (
                     <p className="mt-1 text-xs text-destructive">{paymentErrors.amount.message}</p>
                   )}
@@ -329,7 +346,7 @@ export function SaleForm({ cardBrands }: Props) {
         )}
       >
         <span className="font-medium uppercase tracking-wide">Restante</span>
-        <span className="tabular-nums text-base font-semibold">${fmt(remaining)}</span>
+        <span className="tabular-nums text-base font-semibold">{fmt(remaining)}</span>
       </div>
 
       {/* Observations */}
@@ -343,28 +360,41 @@ export function SaleForm({ cardBrands }: Props) {
         />
       </div>
 
-      {/* Server message */}
-      {serverMessage && (
+      {/* Error inline; success uses the floating toast outside this fieldset. */}
+      {errorMessage && (
         <div
-          role="status"
-          className={cn(
-            'rounded-card border px-4 py-3 text-sm',
-            serverMessage.type === 'success'
-              ? 'border-success/40 bg-success/10 text-success'
-              : 'border-destructive/40 bg-destructive/10 text-destructive',
-          )}
+          role="alert"
+          className="rounded-card border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
         >
-          {serverMessage.text}
+          {errorMessage}
         </div>
+      )}
+
+      {successToast && (
+        <SuccessToast
+          amount={successToast.amount}
+          saleId={successToast.saleId}
+          onClose={() => setSuccessToast(null)}
+        />
+      )}
+
+      {pendingConfirm && (
+        <SaleConfirmDialog
+          data={pendingConfirm}
+          cardBrands={cardBrands}
+          isPending={isPending}
+          onConfirm={handleConfirm}
+          onCancel={() => setPendingConfirm(null)}
+        />
       )}
 
       {/* Submit */}
       <div className="flex items-center justify-between gap-4">
         <p className="text-xs text-muted-foreground tabular-nums">
-          Total: ${fmt(totalDecimal)} · Pagos: ${fmt(paymentsSum)}
+          Total: {fmt(totalDecimal)} · Pagos: {fmt(paymentsSum)}
         </p>
         <Button type="submit" disabled={!canSubmit}>
-          {isPending ? 'Guardando…' : 'Guardar venta'}
+          Continuar →
         </Button>
       </div>
     </form>

@@ -12,11 +12,14 @@ import {
   isValidDateString,
   todayInAppTZ,
 } from '@/lib/dates';
+import { parseSalesFilters, hasActiveFilters } from '@/lib/filters';
+import { listActiveCardBrands } from '@/lib/queries/card-brands';
 import { getDailySalesTotals, listDailySales } from '@/lib/queries/sales';
 import { AnalyticsCards } from '@/components/sales/analytics-cards';
+import { SalesFiltersBar } from '@/components/sales/sales-filters';
 import { SalesTable } from '@/components/sales/sales-table';
 
-type SearchParams = Promise<{ date?: string }>;
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 export const dynamic = 'force-dynamic';
 
@@ -35,15 +38,18 @@ export default async function DailySalesPage({
   }
 
   const params = await searchParams;
-  const requested = params.date && isValidDateString(params.date) ? params.date : null;
+  const dateParam = typeof params.date === 'string' ? params.date : undefined;
+  const requested = dateParam && isValidDateString(dateParam) ? dateParam : null;
   const date = requested ?? todayInAppTZ();
   const isToday = date === todayInAppTZ();
   const longDate = formatLongDateInAppTZ(date);
   const { start, end } = dayRangeInAppTZ(date);
+  const filters = parseSalesFilters(params);
 
-  const [totals, sales] = await Promise.all([
-    getDailySalesTotals(start, end),
-    listDailySales(start, end),
+  const [totals, sales, cardBrands] = await Promise.all([
+    getDailySalesTotals(start, end, filters),
+    listDailySales(start, end, filters),
+    listActiveCardBrands(),
   ]);
 
   return (
@@ -91,19 +97,25 @@ export default async function DailySalesPage({
         </div>
       </header>
 
-      <AnalyticsCards totals={totals} className="mb-8" />
+      <SalesFiltersBar filters={filters} cardBrands={cardBrands} />
+
+      <AnalyticsCards totals={totals} className="mb-8 mt-6" />
 
       {sales.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-card border border-dashed border-border bg-card px-6 py-16 text-center">
           <p className="text-sm text-muted-foreground">
-            No hay ventas registradas para esta fecha.
+            {hasActiveFilters(filters)
+              ? 'Ninguna venta de esta fecha coincide con los filtros aplicados.'
+              : 'No hay ventas registradas para esta fecha.'}
           </p>
-          <Link
-            href="/ventas/nueva"
-            className="rounded-input bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
-          >
-            Registrar la primera venta
-          </Link>
+          {!hasActiveFilters(filters) && (
+            <Link
+              href="/ventas/nueva"
+              className="rounded-input bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+            >
+              Registrar la primera venta
+            </Link>
+          )}
         </div>
       ) : (
         <SalesTable sales={sales} />

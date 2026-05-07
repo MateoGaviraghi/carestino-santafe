@@ -149,6 +149,68 @@ describe('getDailySalesTotals', () => {
   });
 });
 
+describe('getDailySalesTotals — with filters', () => {
+  it('filter by method=efectivo only includes sales that have a cash payment, but counts ALL payments of those sales', async () => {
+    const { start, end } = dayRangeInAppTZ(TEST_DAY);
+    // Sales with at least one cash payment: Sale 1 (1000 cash), Sale 3 (500 cash + 1000 credito).
+    const totals = await getDailySalesTotals(start, end, { methods: ['efectivo'] });
+    expect(totals.salesCount).toBe(2);
+    expect(totals.salesTotal).toBe('2500.00'); // 1000 + 500 + 1000
+    expect(totals.perMethod.efectivo).toBe('1500.00'); // both cash payments
+    expect(totals.perMethod.credito3).toBe('1000.00'); // child of Sale 3
+    expect(totals.perMethod.transferencia).toBe('0');
+    expect(totals.perMethod.debito).toBe('0');
+  });
+
+  it('filter by method=credito + installments=3 narrows to one sale', async () => {
+    const { start, end } = dayRangeInAppTZ(TEST_DAY);
+    const totals = await getDailySalesTotals(start, end, {
+      methods: ['credito'],
+      installments: [3],
+    });
+    expect(totals.salesCount).toBe(1);
+    expect(totals.salesTotal).toBe('1500.00');
+    expect(totals.perMethod.credito3).toBe('1000.00');
+    expect(totals.perMethod.efectivo).toBe('500.00');
+  });
+
+  it('filter by cardBrandId=Visa narrows to debit + credit sales', async () => {
+    const { start, end } = dayRangeInAppTZ(TEST_DAY);
+    const totals = await getDailySalesTotals(start, end, {
+      cardBrandIds: [visaId],
+    });
+    // Sales with a Visa payment: Sale 3 (1500), Sale 4 (800).
+    expect(totals.salesCount).toBe(2);
+    expect(totals.salesTotal).toBe('2300.00');
+    expect(totals.perMethod.debito).toBe('800.00');
+    expect(totals.perMethod.credito3).toBe('1000.00');
+    expect(totals.perMethod.efectivo).toBe('500.00');
+  });
+
+  it('filter by search matches observations (ILIKE)', async () => {
+    // None of the seeded sales have observations — should match zero.
+    const { start, end } = dayRangeInAppTZ(TEST_DAY);
+    const totals = await getDailySalesTotals(start, end, { search: 'navidad' });
+    expect(totals.salesCount).toBe(0);
+    expect(totals.salesTotal).toBe('0');
+  });
+});
+
+describe('listDailySales — with filters', () => {
+  it('filter by method=transferencia returns only the matching sale', async () => {
+    const { start, end } = dayRangeInAppTZ(TEST_DAY);
+    const list = await listDailySales(start, end, { methods: ['transferencia'] });
+    expect(list).toHaveLength(1);
+    expect(list[0]!.totalAmount).toBe('2000.00');
+  });
+
+  it('filter by method=efectivo returns both sales with a cash payment', async () => {
+    const { start, end } = dayRangeInAppTZ(TEST_DAY);
+    const list = await listDailySales(start, end, { methods: ['efectivo'] });
+    expect(list).toHaveLength(2);
+  });
+});
+
 describe('listDailySales', () => {
   it('returns sales ordered most-recent-first with payments grouped', async () => {
     const { start, end } = dayRangeInAppTZ(TEST_DAY);

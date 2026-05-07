@@ -5,8 +5,24 @@
  * we sum sale_payments.amount over a join — `SUM(sales.total_amount)` would
  * multiply by the number of payments per sale, but `SUM(sale_payments.amount)`
  * for the same window equals the sales total under the sum invariant (G-006).
+ *
+ * Filters semantics (see lib/filters.ts): ANY-of match on the children. A
+ * filtered sale = any of its payments matches the criterion (EXISTS subquery).
+ * Once a sale is in the filtered set, the totals card sum ALL of its payments.
  */
-import { and, asc, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  exists,
+  gte,
+  ilike,
+  inArray,
+  lt,
+  type SQL,
+  sql,
+} from 'drizzle-orm';
 import { getDb } from '@/db';
 import {
   cardBrands,
@@ -14,10 +30,11 @@ import {
   sales,
   type PaymentMethod,
 } from '@/db/schema';
+import type { SalesFilters } from '@/lib/filters';
 
 export type DailyTotals = {
   salesCount: number;
-  salesTotal: string; // numeric formatted as string
+  salesTotal: string;
   perMethod: {
     efectivo: string;
     transferencia: string;
@@ -49,16 +66,89 @@ export type DailySale = {
 const ZERO = '0.00';
 
 /**
- * Per-method totals + sales count for the half-open [start, end) window.
- *
- * Uses a single query with CASE expressions; one round-trip. Returns
- * strings to preserve numeric(12,2) precision (G-005).
+ * Build the WHERE conditions for a daily-window sales query, optionally
+ * narrowed by user-supplied filters. Filters on the child table use EXISTS
+ * subqueries so the sale is included when ANY of its payments matches.
+ */
+function buildSalesWhere(start: Date, end: Date, filters?: SalesFilters): SQL {
+  const db = getDb();
+  const conditions: SQL[] = [
+    gte(sales.saleDate, start),
+    lt(sales.saleDate, end),
+  ];
+
+  if (filters?.search) {
+    const condition = ilike(sales.observations, `%${filters.search}%`);
+    if (condition) conditions.push(condition);
+  }
+
+  if (filters?.methods?.length) {
+    conditions.push(
+      exists(
+        db
+          .select({ one: sql`1` })
+          .from(salePayments)
+          .where(
+            and(
+              eq(salePayments.saleId, sales.id),
+              inArray(salePayments.method, filters.methods),
+            ),
+          ),
+      ),
+    );
+  }
+
+  if (filters?.cardBrandIds?.length) {
+    conditions.push(
+      exists(
+        db
+          .select({ one: sql`1` })
+          .from(salePayments)
+          .where(
+            and(
+              eq(salePayments.saleId, sales.id),
+              inArray(salePayments.cardBrandId, filters.cardBrandIds),
+            ),
+          ),
+      ),
+    );
+  }
+
+  if (filters?.installments?.length) {
+    conditions.push(
+      exists(
+        db
+          .select({ one: sql`1` })
+          .from(salePayments)
+          .where(
+            and(
+              eq(salePayments.saleId, sales.id),
+              inArray(salePayments.installments, filters.installments),
+            ),
+          ),
+      ),
+    );
+  }
+
+  // and(...) returns SQL | undefined; with at least 2 conditions (start/end)
+  // it never returns undefined, but we narrow anyway.
+  const where = and(...conditions);
+  if (!where) throw new Error('buildSalesWhere produced empty WHERE');
+  return where;
+}
+
+/**
+ * Per-method totals + sales count for the half-open [start, end) window,
+ * narrowed by optional filters.
  */
 export async function getDailySalesTotals(
   start: Date,
   end: Date,
+  filters?: SalesFilters,
 ): Promise<DailyTotals> {
   const db = getDb();
+  const where = buildSalesWhere(start, end, filters);
+
   const rows = await db
     .select({
       salesCount: sql<number>`COUNT(DISTINCT ${sales.id})::int`,
@@ -72,7 +162,7 @@ export async function getDailySalesTotals(
     })
     .from(sales)
     .leftJoin(salePayments, eq(salePayments.saleId, sales.id))
-    .where(and(gte(sales.saleDate, start), lt(sales.saleDate, end)));
+    .where(where);
 
   const head = rows[0];
   if (!head) {
@@ -106,12 +196,15 @@ export async function getDailySalesTotals(
 
 /**
  * Sales for the half-open [start, end) window with their payments
- * (joined to card_brands for the brand name). Sorted most-recent-first.
- *
+ * (joined to card_brands for the brand name), narrowed by optional filters.
  * Two queries: heads + children. Group in app code so we don't have to
  * define Drizzle relations just for this read path.
  */
-export async function listDailySales(start: Date, end: Date): Promise<DailySale[]> {
+export async function listDailySales(
+  start: Date,
+  end: Date,
+  filters?: SalesFilters,
+): Promise<DailySale[]> {
   const db = getDb();
 
   const heads = await db
@@ -123,7 +216,7 @@ export async function listDailySales(start: Date, end: Date): Promise<DailySale[
       createdBy: sales.createdBy,
     })
     .from(sales)
-    .where(and(gte(sales.saleDate, start), lt(sales.saleDate, end)))
+    .where(buildSalesWhere(start, end, filters))
     .orderBy(desc(sales.saleDate));
 
   if (heads.length === 0) return [];
