@@ -49,6 +49,11 @@ Replaces the paper logbook used to track daily sales, cash withdrawals and expen
 | `npm run db:generate` | Generate Drizzle migration from `db/schema.ts`. |
 | `npm run db:migrate` | Apply migrations to `DATABASE_URL_UNPOOLED`. |
 | `npm run db:studio` | Open Drizzle Studio. |
+| `npm run db:check` | Verify Neon connection, tables, sum-invariant trigger, seed. |
+| `npm run db:seed` | Idempotent seed of `card_brands` (Visa, Mastercard, Amex, Naranja). |
+| `npm run db:test-invariant` | Smoke test: valid sale OK, sum-mismatch rejected with `P5001`. |
+| `npm run db:backfill-users` | Pull users from Clerk Admin API into local `users`. Use after first deploy or to recover from missed webhooks. |
+| `npm test` | Run Vitest suite (currently: webhook handler tests). |
 
 ## First-time deploy (one-time setup)
 
@@ -69,8 +74,28 @@ In the Vercel project → **Integrations** → install **Neon**. Pick the Neon p
 ### 4. Configure Clerk
 
 - Add the Vercel URL to Clerk **Allowed origins**.
-- In **JWT Templates → default session token**, add `publicMetadata` to the claims so `sessionClaims.publicMetadata.role` is readable server-side.
+- In **Configure → Sessions → Customize session token**, add to the JSON:
+  ```json
+  { "publicMetadata": "{{user.public_metadata}}" }
+  ```
+  Without this, `sessionClaims.publicMetadata.role` is empty server-side and every `requireRole()` call throws `forbidden`.
 - Enable MFA on Mariano's account (free).
+
+#### Webhook (users mirror)
+
+The local `users` table is kept in sync with Clerk via Svix-signed webhooks.
+
+1. **Configure → Webhooks → Add Endpoint**.
+2. **Endpoint URL**: `https://<your-vercel-domain>/api/webhooks/clerk`
+   (for local dev, expose `localhost:3000` with ngrok and use that URL).
+3. **Subscribe to events**: `user.created`, `user.updated`, `user.deleted`.
+4. **Save** → copy the **Signing secret** (starts with `whsec_`) → set `CLERK_WEBHOOK_SECRET` in Vercel + `.env.local`.
+
+If the webhook missed events (deploy was down, secret was rotated, etc.) re-sync everything by running:
+```bash
+npm run db:backfill-users
+```
+This pulls every Clerk user via Admin API and upserts them into `users`. Idempotent.
 
 ### 5. Create the super admin (Mariano)
 
