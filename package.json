@@ -32,6 +32,7 @@
     "date-fns-tz": "^3.2.0",
     "decimal.js": "^10.4.3",
     "drizzle-orm": "^0.38.3",
+    "exceljs": "^4.4.0",
     "jspdf": "^2.5.2",
     "jspdf-autotable": "^3.8.4",
     "lucide-react": "^0.469.0",

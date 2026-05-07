@@ -12,7 +12,11 @@ import {
   isValidDateString,
   todayInAppTZ,
 } from '@/lib/dates';
-import { parseSalesFilters, hasActiveFilters } from '@/lib/filters';
+import {
+  hasActiveFilters,
+  parseSalesFilters,
+  serializeSalesFilters,
+} from '@/lib/filters';
 import { listActiveCardBrands } from '@/lib/queries/card-brands';
 import { getDailySalesTotals, listDailySales } from '@/lib/queries/sales';
 import { AnalyticsCards } from '@/components/sales/analytics-cards';
@@ -52,6 +56,13 @@ export default async function DailySalesPage({
     listActiveCardBrands(),
   ]);
 
+  // Build the Excel export URL with current date + filters preserved.
+  const exportParams = serializeSalesFilters(filters);
+  exportParams.set('period', 'daily');
+  exportParams.set('date', date);
+  exportParams.set('format', 'xlsx');
+  const exportXlsxUrl = `/api/export/sales?${exportParams.toString()}`;
+
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
       <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -88,6 +99,12 @@ export default async function DailySalesPage({
               Ver
             </button>
           </form>
+          <a
+            href={exportXlsxUrl}
+            className="inline-flex h-9 items-center rounded-input border border-border bg-background px-3 text-xs font-medium hover:bg-muted"
+          >
+            Exportar Excel
+          </a>
           <Link
             href="/ventas/nueva"
             className="inline-flex h-9 items-center rounded-input bg-primary px-3 text-xs font-medium text-primary-foreground hover:opacity-90"
