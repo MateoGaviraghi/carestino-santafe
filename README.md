@@ -115,6 +115,48 @@ For new cashier employees later: same flow with `{ "role": "cajero" }`. (V1 ship
 
 Push to `main` → Vercel builds and deploys. Health check: `GET /api/health` should return `{ ok: true, db: "up" }`.
 
+## Production smoke checklist
+
+Run this once after the first prod deploy and after every significant change:
+
+1. **Health** — `GET https://<your-domain>/api/health` returns `200 { ok: true, db: "up" }`.
+2. **Sign-in** — open the homepage, click *Iniciar sesión*, log in as the test user.
+3. **Role badge** — the home shows your role in green (`super_admin`).
+4. **Sale (single method)** — `/ventas/nueva`, total `1000`, efectivo `1000`, *Continuar* → confirm dialog → *Confirmar venta* → success modal.
+5. **Sale (mixed)** — total `1500`, payment 1 efectivo `500`, payment 2 crédito Visa 3 cuotas `1000`, save.
+6. **Sum mismatch (negative test)** — total `1000`, efectivo `999`, button stays disabled, restante shows `$1,00` in red.
+7. **Daily sheet** — `/ventas/diaria` shows the analytics cards updated and the table with both sales.
+8. **Filters** — toggle *Crédito*, only the mixed sale appears; clear filters; type "test" in search; clear.
+9. **Excel export** — *Excel* button downloads `ventas-diaria-YYYY-MM-DD.xlsx`. Open it: orange Resumen header, Ventas tab with autofilter, monto right-aligned in `$#,##0.00`.
+10. **PDF export** — *PDF* button downloads the same date as `.pdf`. Open it: orange header block with the 8 cards, detalle table below, footer "Página 1 de N".
+11. **Sign out** — *UserButton* (top-right avatar) → sign out, redirects to landing.
+
+Anything red, fix before handing off to Mariano.
+
+## Handing off to Mariano (one-time)
+
+1. **Create his Clerk user** as documented in step 5 above with `{ "role": "super_admin" }`.
+2. Sit with him once and walk through the daily flow:
+   - Cargar una venta → confirmar → ver toast verde.
+   - Abrir planilla diaria → entender los cards y la tabla.
+   - Cambiar de día con el date picker.
+   - Aplicar filtros, ver cómo cambian los cards.
+   - Exportar Excel y PDF — abrir cada uno.
+3. Recordarle que **no hace falta Enter en el buscador** (es vivo).
+4. Dejarle anotado el link directo a `/ventas/diaria` como home alternativo si lo prefiere.
+
+## Out of scope for MVP (V1+ work)
+
+These are intentionally NOT in MVP and live in [11-ROADMAP.md](./carestino-santafe-brain/11-ROADMAP.md):
+
+- Editar / eliminar ventas (super_admin) con confirmación tipeada "ELIMINAR".
+- Módulo Retiros (form + planillas + export).
+- Módulo Gastos (form + lista filtrable + export).
+- Planillas mensual y anual con drill-down.
+- UI `/configuracion/empleados`, `/configuracion/marcas-de-tarjeta`, `/configuracion/personas-que-retiran`.
+- Sentry + UptimeRobot + monthly `pg_dump` backup.
+- Soft delete + audit log (V2).
+
 ## Conventions
 
 See [`carestino-santafe-brain/09-RULES.md`](./carestino-santafe-brain/09-RULES.md) for naming, money handling, RBAC enforcement, and don'ts. The three non-negotiables:
