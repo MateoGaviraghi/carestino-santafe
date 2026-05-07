@@ -13,7 +13,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "db:check": "node --env-file=.env.local scripts/check-db.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.12.0",
