@@ -46,3 +46,19 @@ export function formatMoney(value: string | Decimal): string {
   const d = typeof value === 'string' ? toDecimal(value) : value;
   return d.toFixed(2);
 }
+
+const ARS_FORMATTER = new Intl.NumberFormat('es-AR', {
+  style: 'currency',
+  currency: 'ARS',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+/**
+ * Format a money string/Decimal as Argentine pesos: "$ 1.234,50".
+ * Use only for display — never round-trip through Number for arithmetic.
+ */
+export function formatARS(value: string | Decimal): string {
+  const d = typeof value === 'string' ? safeDecimal(value) ?? new Decimal(0) : value;
+  return ARS_FORMATTER.format(d.toNumber());
+}

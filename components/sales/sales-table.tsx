@@ -1,0 +1,86 @@
+import { formatTimeInAppTZ } from '@/lib/dates';
+import { formatARS } from '@/lib/money';
+import type { DailySale, DailySalePayment } from '@/lib/queries/sales';
+import type { PaymentMethod } from '@/db/schema';
+import { cn } from '@/lib/utils';
+
+const METHOD_LABEL: Record<PaymentMethod, string> = {
+  efectivo: 'Efectivo',
+  transferencia: 'Transferencia',
+  debito: 'Débito',
+  credito: 'Crédito',
+};
+
+function paymentChipText(p: DailySalePayment): string {
+  const base = METHOD_LABEL[p.method];
+  const brand = p.cardBrandName ? ` ${p.cardBrandName}` : '';
+  const cuotas = p.installments ? ` ${p.installments}c` : '';
+  return `${base}${brand}${cuotas} · ${formatARS(p.amount)}`;
+}
+
+function PaymentChip({ payment }: { payment: DailySalePayment }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs',
+        'border-border bg-muted text-foreground tabular-nums',
+      )}
+    >
+      {paymentChipText(payment)}
+    </span>
+  );
+}
+
+type Props = { sales: DailySale[] };
+
+export function SalesTable({ sales }: Props) {
+  if (sales.length === 0) return null;
+
+  return (
+    <div className="overflow-x-auto rounded-card border border-border">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border bg-muted/50 text-left">
+            <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Hora
+            </th>
+            <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Total
+            </th>
+            <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Métodos
+            </th>
+            <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Observaciones
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {sales.map((s) => (
+            <tr
+              key={s.id}
+              className="border-b border-border last:border-0 hover:bg-muted/30"
+            >
+              <td className="whitespace-nowrap px-3 py-3 text-xs text-muted-foreground tabular-nums">
+                {formatTimeInAppTZ(s.saleDate)}
+              </td>
+              <td className="whitespace-nowrap px-3 py-3 font-medium tabular-nums">
+                {formatARS(s.totalAmount)}
+              </td>
+              <td className="px-3 py-3">
+                <div className="flex flex-wrap gap-1.5">
+                  {s.payments.map((p) => (
+                    <PaymentChip key={p.id} payment={p} />
+                  ))}
+                </div>
+              </td>
+              <td className="px-3 py-3 text-xs text-muted-foreground">
+                {s.observations || '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}

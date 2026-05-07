@@ -1,0 +1,169 @@
+/**
+ * Read queries for the sales sheets.
+ *
+ * Aggregations are computed SQL-side (per 09-RULES.md). For per-method totals
+ * we sum sale_payments.amount over a join — `SUM(sales.total_amount)` would
+ * multiply by the number of payments per sale, but `SUM(sale_payments.amount)`
+ * for the same window equals the sales total under the sum invariant (G-006).
+ */
+import { and, asc, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
+import { getDb } from '@/db';
+import {
+  cardBrands,
+  salePayments,
+  sales,
+  type PaymentMethod,
+} from '@/db/schema';
+
+export type DailyTotals = {
+  salesCount: number;
+  salesTotal: string; // numeric formatted as string
+  perMethod: {
+    efectivo: string;
+    transferencia: string;
+    debito: string;
+    credito1: string;
+    credito3: string;
+    credito6: string;
+  };
+};
+
+export type DailySalePayment = {
+  id: string;
+  method: PaymentMethod;
+  amount: string;
+  cardBrandId: number | null;
+  cardBrandName: string | null;
+  installments: number | null;
+};
+
+export type DailySale = {
+  id: string;
+  totalAmount: string;
+  observations: string | null;
+  saleDate: Date;
+  createdBy: string;
+  payments: DailySalePayment[];
+};
+
+const ZERO = '0.00';
+
+/**
+ * Per-method totals + sales count for the half-open [start, end) window.
+ *
+ * Uses a single query with CASE expressions; one round-trip. Returns
+ * strings to preserve numeric(12,2) precision (G-005).
+ */
+export async function getDailySalesTotals(
+  start: Date,
+  end: Date,
+): Promise<DailyTotals> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      salesCount: sql<number>`COUNT(DISTINCT ${sales.id})::int`,
+      salesTotal: sql<string>`COALESCE(SUM(${salePayments.amount}), 0)::text`,
+      cash: sql<string>`COALESCE(SUM(CASE WHEN ${salePayments.method} = 'efectivo' THEN ${salePayments.amount} ELSE 0 END), 0)::text`,
+      transfer: sql<string>`COALESCE(SUM(CASE WHEN ${salePayments.method} = 'transferencia' THEN ${salePayments.amount} ELSE 0 END), 0)::text`,
+      debit: sql<string>`COALESCE(SUM(CASE WHEN ${salePayments.method} = 'debito' THEN ${salePayments.amount} ELSE 0 END), 0)::text`,
+      credit1: sql<string>`COALESCE(SUM(CASE WHEN ${salePayments.method} = 'credito' AND ${salePayments.installments} = 1 THEN ${salePayments.amount} ELSE 0 END), 0)::text`,
+      credit3: sql<string>`COALESCE(SUM(CASE WHEN ${salePayments.method} = 'credito' AND ${salePayments.installments} = 3 THEN ${salePayments.amount} ELSE 0 END), 0)::text`,
+      credit6: sql<string>`COALESCE(SUM(CASE WHEN ${salePayments.method} = 'credito' AND ${salePayments.installments} = 6 THEN ${salePayments.amount} ELSE 0 END), 0)::text`,
+    })
+    .from(sales)
+    .leftJoin(salePayments, eq(salePayments.saleId, sales.id))
+    .where(and(gte(sales.saleDate, start), lt(sales.saleDate, end)));
+
+  const head = rows[0];
+  if (!head) {
+    return {
+      salesCount: 0,
+      salesTotal: ZERO,
+      perMethod: {
+        efectivo: ZERO,
+        transferencia: ZERO,
+        debito: ZERO,
+        credito1: ZERO,
+        credito3: ZERO,
+        credito6: ZERO,
+      },
+    };
+  }
+
+  return {
+    salesCount: Number(head.salesCount),
+    salesTotal: head.salesTotal,
+    perMethod: {
+      efectivo: head.cash,
+      transferencia: head.transfer,
+      debito: head.debit,
+      credito1: head.credit1,
+      credito3: head.credit3,
+      credito6: head.credit6,
+    },
+  };
+}
+
+/**
+ * Sales for the half-open [start, end) window with their payments
+ * (joined to card_brands for the brand name). Sorted most-recent-first.
+ *
+ * Two queries: heads + children. Group in app code so we don't have to
+ * define Drizzle relations just for this read path.
+ */
+export async function listDailySales(start: Date, end: Date): Promise<DailySale[]> {
+  const db = getDb();
+
+  const heads = await db
+    .select({
+      id: sales.id,
+      totalAmount: sales.totalAmount,
+      observations: sales.observations,
+      saleDate: sales.saleDate,
+      createdBy: sales.createdBy,
+    })
+    .from(sales)
+    .where(and(gte(sales.saleDate, start), lt(sales.saleDate, end)))
+    .orderBy(desc(sales.saleDate));
+
+  if (heads.length === 0) return [];
+
+  const ids = heads.map((s) => s.id);
+  const paymentRows = await db
+    .select({
+      id: salePayments.id,
+      saleId: salePayments.saleId,
+      method: salePayments.method,
+      amount: salePayments.amount,
+      cardBrandId: salePayments.cardBrandId,
+      cardBrandName: cardBrands.name,
+      installments: salePayments.installments,
+    })
+    .from(salePayments)
+    .leftJoin(cardBrands, eq(cardBrands.id, salePayments.cardBrandId))
+    .where(inArray(salePayments.saleId, ids))
+    .orderBy(asc(salePayments.method));
+
+  const grouped = new Map<string, DailySalePayment[]>();
+  for (const p of paymentRows) {
+    const list = grouped.get(p.saleId) ?? [];
+    list.push({
+      id: p.id,
+      method: p.method as PaymentMethod,
+      amount: p.amount,
+      cardBrandId: p.cardBrandId,
+      cardBrandName: p.cardBrandName,
+      installments: p.installments,
+    });
+    grouped.set(p.saleId, list);
+  }
+
+  return heads.map((h) => ({
+    id: h.id,
+    totalAmount: h.totalAmount,
+    observations: h.observations,
+    saleDate: h.saleDate,
+    createdBy: h.createdBy,
+    payments: grouped.get(h.id) ?? [],
+  }));
+}

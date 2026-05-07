@@ -70,6 +70,20 @@
 **Date:** 2026-04-28
 **Why:** keeps the form simple, removes a class of bugs around invalid dates. Backdating lands in V1 as an admin-only field.
 
+### D-013 — `db.batch()` instead of `db.transaction()` (neon-http limitation)
+
+**Date:** 2026-05-07
+**Why:** `drizzle-orm/neon-http` does not implement `db.transaction()` — calling it throws `No transactions support in neon-http driver`. We need atomicity for `INSERT INTO sales + INSERT INTO sale_payments` so the DEFERRABLE trigger fires at COMMIT after both rows exist. `db.batch([...])` ships every query in a single HTTP request to Neon's `/sql/v1/transaction` endpoint, which wraps them in `BEGIN ... COMMIT` server-side — the same atomicity guarantee, just with a different Drizzle API.
+**Implementation note:** because `batch` queries can't pipe values between each other, we pre-generate the `sale.id` in app code (`crypto.randomUUID()`) so the second insert can reference it without a chained `RETURNING`. This contradicts the original 09-RULES.md guidance ("wrap multi-row mutations in `db.transaction(...)`") — read that rule as "use the atomic API for the driver in use".
+**Reconsider if:** we switch to the WebSocket driver (`drizzle-orm/neon-serverless`), which does support real `transaction()` blocks. The trade-off is keep-alive + cold-start cost on serverless functions; not worth it at MVP scale.
+
+### D-014 — Webhook defaults missing `publicMetadata.role` to `cajero`
+
+**Date:** 2026-05-07
+**Why:** `users.role` is `NOT NULL`. The Clerk webhook may fire before an admin has set the role in `publicMetadata` (especially for self-signed-up users in any future flow, or for the first event of a new user created via Dashboard but without metadata set yet). Defaulting to `cajero` (least privilege) lets the row exist without violating the CHECK constraint, and the role is overwritten on every subsequent `user.updated`, so promoting from `cajero` to `super_admin` in the dashboard eventually propagates.
+**How to apply:** never assume a fresh row in `users` is privileged. The source of truth for the role is still Clerk `publicMetadata.role`; the local mirror exists only for FK ergonomics.
+**Reconsider if:** we add an admin-only invite flow that pre-sets the role server-side before Clerk fires the event — at that point the default could be `null` and the webhook could reject events without a role.
+
 ## Gotchas
 
 ### G-001 — Argentina time zone is constant
