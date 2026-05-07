@@ -20,6 +20,7 @@ import {
 import { listActiveCardBrands } from '@/lib/queries/card-brands';
 import { getDailySalesTotals, listDailySales } from '@/lib/queries/sales';
 import { AnalyticsCards } from '@/components/sales/analytics-cards';
+import { DatePicker } from '@/components/sales/date-picker';
 import { SalesFiltersBar } from '@/components/sales/sales-filters';
 import { SalesTable } from '@/components/sales/sales-table';
 
@@ -85,24 +86,7 @@ export default async function DailySalesPage({
         </div>
 
         <div className="flex items-center gap-2">
-          <form method="get" className="flex items-center gap-2">
-            <label htmlFor="date" className="sr-only">
-              Fecha
-            </label>
-            <input
-              id="date"
-              name="date"
-              type="date"
-              defaultValue={date}
-              className="h-9 rounded-input border border-input bg-background px-2 text-sm tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            />
-            <button
-              type="submit"
-              className="h-9 rounded-input bg-muted px-3 text-xs font-medium hover:bg-muted/80"
-            >
-              Ver
-            </button>
-          </form>
+          <DatePicker date={date} />
           <a
             href={exportXlsxUrl}
             className="inline-flex h-9 items-center rounded-input border border-border bg-background px-3 text-xs font-medium hover:bg-muted"
