@@ -195,6 +195,12 @@ export default async function HomePage() {
                     >
                       Personas que retiran
                     </Link>
+                    <Link
+                      href="/configuracion/empleados"
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      Empleados
+                    </Link>
                   </div>
                 </div>
               )}
