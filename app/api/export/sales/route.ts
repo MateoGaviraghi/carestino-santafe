@@ -22,12 +22,18 @@ import { dayRangeInAppTZ, isValidDateString, todayInAppTZ } from '@/lib/dates';
 import { parseSalesFilters } from '@/lib/filters';
 import { getDailySalesTotals, listDailySales } from '@/lib/queries/sales';
 import { buildSalesDailyXlsx, salesDailyFilename } from '@/lib/export/sales-xlsx';
+import { buildSalesDailyPdf, salesDailyPdfFilename } from '@/lib/export/sales-pdf';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const SUPPORTED_PERIODS = new Set(['daily']);
-const SUPPORTED_FORMATS = new Set(['xlsx']);
+const SUPPORTED_FORMATS = new Set(['xlsx', 'pdf']);
+
+const CONTENT_TYPE: Record<string, string> = {
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  pdf: 'application/pdf',
+};
 
 function bad(error: string, status = 400) {
   return NextResponse.json({ ok: false, error }, { status });
@@ -66,17 +72,23 @@ export async function GET(req: Request): Promise<Response> {
     listDailySales(start, end, filters),
   ]);
 
-  // 4. Build workbook. Cast through unknown to satisfy TS 5.7's stricter
+  // 4. Build the file. Cast through unknown to satisfy TS 5.7's stricter
   //    Uint8Array<ArrayBufferLike> vs BodyInit shape. The runtime accepts
   //    Uint8Array directly.
-  const bytes = await buildSalesDailyXlsx(date, totals, sales);
-  const filename = salesDailyFilename(date);
+  let bytes: Uint8Array;
+  let filename: string;
+  if (format === 'xlsx') {
+    bytes = await buildSalesDailyXlsx(date, totals, sales);
+    filename = salesDailyFilename(date);
+  } else {
+    bytes = buildSalesDailyPdf(date, totals, sales);
+    filename = salesDailyPdfFilename(date);
+  }
 
   return new Response(bytes as unknown as BodyInit, {
     status: 200,
     headers: {
-      'Content-Type':
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Type': CONTENT_TYPE[format]!,
       'Content-Disposition': `attachment; filename="${filename}"`,
       'Cache-Control': 'no-store',
     },

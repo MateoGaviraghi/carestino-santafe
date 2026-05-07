@@ -56,12 +56,16 @@ export default async function DailySalesPage({
     listActiveCardBrands(),
   ]);
 
-  // Build the Excel export URL with current date + filters preserved.
-  const exportParams = serializeSalesFilters(filters);
-  exportParams.set('period', 'daily');
-  exportParams.set('date', date);
-  exportParams.set('format', 'xlsx');
-  const exportXlsxUrl = `/api/export/sales?${exportParams.toString()}`;
+  // Build export URLs (Excel + PDF) preserving current date and filters.
+  const baseExportParams = serializeSalesFilters(filters);
+  baseExportParams.set('period', 'daily');
+  baseExportParams.set('date', date);
+  const xlsxParams = new URLSearchParams(baseExportParams);
+  xlsxParams.set('format', 'xlsx');
+  const exportXlsxUrl = `/api/export/sales?${xlsxParams.toString()}`;
+  const pdfParams = new URLSearchParams(baseExportParams);
+  pdfParams.set('format', 'pdf');
+  const exportPdfUrl = `/api/export/sales?${pdfParams.toString()}`;
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
@@ -103,7 +107,13 @@ export default async function DailySalesPage({
             href={exportXlsxUrl}
             className="inline-flex h-9 items-center rounded-input border border-border bg-background px-3 text-xs font-medium hover:bg-muted"
           >
-            Exportar Excel
+            Excel
+          </a>
+          <a
+            href={exportPdfUrl}
+            className="inline-flex h-9 items-center rounded-input border border-border bg-background px-3 text-xs font-medium hover:bg-muted"
+          >
+            PDF
           </a>
           <Link
             href="/ventas/nueva"

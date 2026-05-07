@@ -98,7 +98,7 @@ describe('GET /api/export/sales', () => {
   });
 
   it('returns 400 for an unsupported format', async () => {
-    const r = await GET(makeReq('period=daily&date=2026-04-01&format=pdf'));
+    const r = await GET(makeReq('period=daily&date=2026-04-01&format=csv'));
     expect(r.status).toBe(400);
     const body = await r.json();
     expect(body.error).toBe('unsupported_format');
@@ -139,5 +139,18 @@ describe('GET /api/export/sales', () => {
     const cd = r.headers.get('Content-Disposition') ?? '';
     // Should still produce a filename of the expected shape.
     expect(cd).toMatch(/ventas-diaria-\d{4}-\d{2}-\d{2}\.xlsx/);
+  });
+
+  it('returns a PDF when format=pdf', async () => {
+    const r = await GET(makeReq('period=daily&date=2026-04-01&format=pdf'));
+    expect(r.status).toBe(200);
+    expect(r.headers.get('Content-Type')).toBe('application/pdf');
+    expect(r.headers.get('Content-Disposition')).toContain(
+      'ventas-diaria-2026-04-01.pdf',
+    );
+    const ab = await r.arrayBuffer();
+    expect(ab.byteLength).toBeGreaterThan(1000);
+    const magic = new TextDecoder().decode(new Uint8Array(ab).subarray(0, 5));
+    expect(magic).toBe('%PDF-');
   });
 });
