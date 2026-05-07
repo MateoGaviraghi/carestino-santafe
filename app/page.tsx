@@ -137,6 +137,29 @@ export default async function HomePage() {
                 </div>
               </div>
 
+              {/* Expenses — admin only */}
+              {roleOk && (
+                <div>
+                  <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Gastos
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Link
+                      href="/gastos/nuevo"
+                      className="inline-flex items-center rounded-input bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+                    >
+                      + Nuevo gasto
+                    </Link>
+                    <Link
+                      href="/gastos/lista"
+                      className="inline-flex items-center rounded-input border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted"
+                    >
+                      Listado
+                    </Link>
+                  </div>
+                </div>
+              )}
+
               {/* Configuration links — admin only */}
               {roleOk && (
                 <div>

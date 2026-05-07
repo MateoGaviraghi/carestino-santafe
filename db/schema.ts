@@ -182,6 +182,51 @@ export const withdrawals = pgTable(
 );
 
 // -----------------------------------------------------------------------------
+// expenses — single-row transaction with same method/card/installments
+// coherence rules as sale_payments (per 04-DATA-MODEL.md). Super_admin only.
+// -----------------------------------------------------------------------------
+
+export const expenses = pgTable(
+  'expenses',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    provider: text('provider').notNull(),
+    amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+    method: text('method').notNull(),
+    cardBrandId: integer('card_brand_id').references(() => cardBrands.id),
+    installments: smallint('installments'),
+    observations: text('observations'),
+    expenseDate: timestamp('expense_date', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('expenses_amount_positive', sql`${t.amount} > 0`),
+    check(
+      'expenses_method_check',
+      sql`${t.method} IN ('efectivo', 'transferencia', 'debito', 'credito')`,
+    ),
+    check(
+      'expenses_card_brand_coherence',
+      sql`(${t.method} IN ('debito','credito') AND ${t.cardBrandId} IS NOT NULL)
+          OR (${t.method} IN ('efectivo','transferencia') AND ${t.cardBrandId} IS NULL)`,
+    ),
+    check(
+      'expenses_installments_coherence',
+      sql`(${t.method} = 'credito' AND ${t.installments} IN (1,3,6))
+          OR (${t.method} <> 'credito' AND ${t.installments} IS NULL)`,
+    ),
+    index('expenses_expense_date_idx').on(desc(t.expenseDate)),
+    index('expenses_provider_idx').on(t.provider),
+    index('expenses_method_expense_date_idx').on(t.method, desc(t.expenseDate)),
+  ],
+);
+
+// -----------------------------------------------------------------------------
 // Inferred types for use in queries and validators.
 // -----------------------------------------------------------------------------
 
@@ -197,3 +242,5 @@ export type WithdrawalPerson = typeof withdrawalPersons.$inferSelect;
 export type NewWithdrawalPerson = typeof withdrawalPersons.$inferInsert;
 export type Withdrawal = typeof withdrawals.$inferSelect;
 export type NewWithdrawal = typeof withdrawals.$inferInsert;
+export type Expense = typeof expenses.$inferSelect;
+export type NewExpense = typeof expenses.$inferInsert;
