@@ -5,14 +5,18 @@
  *
  * Layer-2 of the sum invariant defense (see 04-DATA-MODEL.md / D-005):
  *   - requireRole() blocks unauthorized callers BEFORE any DB work.
- *   - createSaleSchema.parse() re-runs on the server (client is untrusted).
+ *   - createSaleSchema.parse() / updateSaleSchema.parse() re-runs on the
+ *     server (client is untrusted).
  *   - The DB trigger (layer 3, SQLSTATE P5001) is mapped here to the
  *     'sum_mismatch' ActionError so callers don't need to introspect
  *     Postgres errors.
  *
  * All mutations live in app/actions/* per 03-ARCHITECTURE.md.
+ *
+ * V1 actions added: updateSale, deleteSale (super_admin only — D-018).
  */
 import { revalidatePath } from 'next/cache';
+import { eq } from 'drizzle-orm';
 import { ZodError } from 'zod';
 import { getDb } from '@/db';
 import { sales, salePayments } from '@/db/schema';
@@ -22,7 +26,12 @@ import {
   requireRole,
   type SessionUser,
 } from '@/lib/auth';
-import { createSaleSchema } from '@/lib/validators/sale';
+import {
+  createSaleSchema,
+  updateSaleSchema,
+  type CreateSaleInput,
+  type UpdateSaleInput,
+} from '@/lib/validators/sale';
 
 export type ActionError =
   | 'unauthorized'
@@ -39,9 +48,6 @@ export type ActionResult<T> =
 /**
  * Returns true if `e` is the custom Postgres exception raised by
  * trg_assert_sale_payments_sum (SQLSTATE 'P5001').
- *
- * Drizzle wraps the underlying Neon driver error, so we look at both
- * `code` and `cause.code`, and as a last resort the message text.
  */
 function isSumMismatchError(e: unknown): boolean {
   if (typeof e !== 'object' || e === null) return false;
@@ -52,10 +58,25 @@ function isSumMismatchError(e: unknown): boolean {
   return false;
 }
 
+function mapZodError(e: ZodError): ActionResult<never> {
+  const issues = e.issues;
+  const isSum = issues.some((i) => i.message === 'sum_mismatch');
+  return {
+    ok: false,
+    error: isSum ? 'sum_mismatch' : 'validation_error',
+    message: issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '),
+  };
+}
+
+const REVALIDATE_PATHS = ['/ventas/diaria'];
+
+// -----------------------------------------------------------------------------
+// createSale — both roles.
+// -----------------------------------------------------------------------------
+
 export async function createSale(
   input: unknown,
 ): Promise<ActionResult<{ saleId: string }>> {
-  // 1. RBAC — both roles can create sales.
   let user: SessionUser;
   try {
     user = await requireRole(['super_admin', 'cajero']);
@@ -65,33 +86,14 @@ export async function createSale(
     throw e;
   }
 
-  // 2. Zod re-validation (client cannot be trusted).
-  let parsed;
+  let parsed: CreateSaleInput;
   try {
     parsed = createSaleSchema.parse(input);
   } catch (e) {
-    if (e instanceof ZodError) {
-      const issues = e.issues;
-      const isSum = issues.some((i) => i.message === 'sum_mismatch');
-      return {
-        ok: false,
-        error: isSum ? 'sum_mismatch' : 'validation_error',
-        message: issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '),
-      };
-    }
+    if (e instanceof ZodError) return mapZodError(e);
     throw e;
   }
 
-  // 3. Insert atomically. Drizzle's neon-http driver does NOT support
-  //    db.transaction() — instead db.batch() ships every query in a single
-  //    HTTP request to Neon's /sql/v1/transaction endpoint, which wraps
-  //    them in BEGIN/COMMIT server-side. The DEFERRABLE trigger
-  //    (trg_assert_sale_payments_sum) fires at COMMIT, after both the
-  //    parent sale and the child payments are present.
-  //
-  //    We pre-generate the saleId in app code so the second insert can
-  //    reference it without a chained RETURNING (batch queries can't pipe
-  //    values between each other).
   const db = getDb();
   const saleId = crypto.randomUUID();
   try {
@@ -112,9 +114,7 @@ export async function createSale(
         })),
       ),
     ]);
-
-    // 4. Revalidate the daily sheet (Spanish URL per D-010).
-    revalidatePath('/ventas/diaria');
+    REVALIDATE_PATHS.forEach((p) => revalidatePath(p));
     return { ok: true, data: { saleId } };
   } catch (e) {
     if (isSumMismatchError(e)) {
@@ -125,6 +125,146 @@ export async function createSale(
       };
     }
     console.error('createSale failed:', e);
+    return { ok: false, error: 'internal_error' };
+  }
+}
+
+// -----------------------------------------------------------------------------
+// updateSale — super_admin only (V1 — D-018).
+//
+// Replaces all sale_payments rows for the given sale and updates the parent.
+// The DEFERRABLE trigger evaluates the sum invariant at COMMIT, after both the
+// new payments and the new total are in place.
+//
+// If `saleDate` (YYYY-MM-DD) is provided, the calendar day moves but the
+// original wall-clock TIME of the sale is preserved (per D-016) — this avoids
+// reshuffling the chronological order inside a day's planilla unless the admin
+// genuinely intends a backdating, in which case they pick a different day.
+// -----------------------------------------------------------------------------
+
+import { APP_TZ } from '@/lib/dates';
+import { fromZonedTime, formatInTimeZone } from 'date-fns-tz';
+
+function rebuildSaleDate(originalUtc: Date, newDateStr: string): Date {
+  // Preserve the wall-clock HH:mm:ss of the original (interpreted in APP_TZ),
+  // attach it to newDateStr (interpreted in APP_TZ), convert back to UTC.
+  const time = formatInTimeZone(originalUtc, APP_TZ, 'HH:mm:ss.SSS');
+  return fromZonedTime(`${newDateStr}T${time}`, APP_TZ);
+}
+
+export async function updateSale(
+  saleId: string,
+  input: unknown,
+): Promise<ActionResult<{ saleId: string }>> {
+  // 1. RBAC — super_admin only (D-018).
+  try {
+    await requireRole(['super_admin']);
+  } catch (e) {
+    if (e instanceof UnauthorizedError) return { ok: false, error: 'unauthorized' };
+    if (e instanceof ForbiddenError) return { ok: false, error: 'forbidden' };
+    throw e;
+  }
+
+  if (typeof saleId !== 'string' || saleId.length === 0) {
+    return { ok: false, error: 'validation_error', message: 'id_invalido' };
+  }
+
+  let parsed: UpdateSaleInput;
+  try {
+    parsed = updateSaleSchema.parse(input);
+  } catch (e) {
+    if (e instanceof ZodError) return mapZodError(e);
+    throw e;
+  }
+
+  const db = getDb();
+
+  // Pre-check existence + read original sale_date (needed when rebuilding
+  // the timestamp on a date change).
+  const existing = await db
+    .select({ id: sales.id, saleDate: sales.saleDate })
+    .from(sales)
+    .where(eq(sales.id, saleId));
+  const head = existing[0];
+  if (!head) return { ok: false, error: 'not_found' };
+
+  const newSaleDate =
+    parsed.saleDate !== undefined ? rebuildSaleDate(head.saleDate, parsed.saleDate) : head.saleDate;
+
+  try {
+    await db.batch([
+      // Replace children.
+      db.delete(salePayments).where(eq(salePayments.saleId, saleId)),
+      db.insert(salePayments).values(
+        parsed.payments.map((p) => ({
+          saleId,
+          method: p.method,
+          amount: p.amount,
+          cardBrandId: p.cardBrandId ?? null,
+          installments: p.installments ?? null,
+        })),
+      ),
+      // Update the parent.
+      db
+        .update(sales)
+        .set({
+          totalAmount: parsed.totalAmount,
+          observations: parsed.observations ?? null,
+          saleDate: newSaleDate,
+          updatedAt: new Date(),
+        })
+        .where(eq(sales.id, saleId)),
+    ]);
+    REVALIDATE_PATHS.forEach((p) => revalidatePath(p));
+    revalidatePath(`/ventas/${saleId}/editar`);
+    return { ok: true, data: { saleId } };
+  } catch (e) {
+    if (isSumMismatchError(e)) {
+      return {
+        ok: false,
+        error: 'sum_mismatch',
+        message: 'La suma de los pagos no coincide con el total.',
+      };
+    }
+    console.error('updateSale failed:', e);
+    return { ok: false, error: 'internal_error' };
+  }
+}
+
+// -----------------------------------------------------------------------------
+// deleteSale — super_admin only (V1 — D-018).
+//
+// Hard delete; sale_payments cascade via FK. Mistakes are recoverable for 7
+// days through Neon PITR. The UI requires a typed-confirmation modal
+// ("ELIMINAR") before invoking this action.
+// -----------------------------------------------------------------------------
+
+export async function deleteSale(saleId: string): Promise<ActionResult<void>> {
+  try {
+    await requireRole(['super_admin']);
+  } catch (e) {
+    if (e instanceof UnauthorizedError) return { ok: false, error: 'unauthorized' };
+    if (e instanceof ForbiddenError) return { ok: false, error: 'forbidden' };
+    throw e;
+  }
+
+  if (typeof saleId !== 'string' || saleId.length === 0) {
+    return { ok: false, error: 'validation_error', message: 'id_invalido' };
+  }
+
+  const db = getDb();
+  try {
+    const result = await db
+      .delete(sales)
+      .where(eq(sales.id, saleId))
+      .returning({ id: sales.id });
+    if (result.length === 0) {
+      return { ok: false, error: 'not_found' };
+    }
+    REVALIDATE_PATHS.forEach((p) => revalidatePath(p));
+    return { ok: true, data: undefined };
+  } catch (e) {
+    console.error('deleteSale failed:', e);
     return { ok: false, error: 'internal_error' };
   }
 }

@@ -26,7 +26,8 @@ vi.mock('@/lib/auth', async () => {
 });
 
 const { requireRole } = await import('@/lib/auth');
-const { createSale } = await import('./sales');
+const { createSale, updateSale, deleteSale } = await import('./sales');
+const { todayInAppTZ } = await import('@/lib/dates');
 
 const db = getDb();
 let visaId: number;
@@ -161,5 +162,137 @@ describe('createSale', () => {
     });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toBe('validation_error');
+  });
+});
+
+// -----------------------------------------------------------------------------
+// updateSale (super_admin only — D-018) + deleteSale.
+// Each test seeds its own sale via createSale and exercises the update/delete
+// path against real Neon, then cleanup wipes the test user via afterAll.
+// -----------------------------------------------------------------------------
+
+async function seedSale(): Promise<string> {
+  const r = await createSale({
+    totalAmount: '1000.00',
+    payments: [{ method: 'efectivo', amount: '1000.00' }],
+  });
+  if (!r.ok) throw new Error(`seed failed: ${r.error}`);
+  return r.data.saleId;
+}
+
+describe('updateSale', () => {
+  it('returns unauthorized without session', async () => {
+    const seedId = await seedSale();
+    vi.mocked(requireRole).mockRejectedValueOnce(new UnauthorizedError());
+    const r = await updateSale(seedId, {
+      totalAmount: '2000.00',
+      payments: [{ method: 'efectivo', amount: '2000.00' }],
+    });
+    expect(r).toEqual({ ok: false, error: 'unauthorized' });
+  });
+
+  it('returns forbidden for cajero (super_admin only)', async () => {
+    const seedId = await seedSale();
+    vi.mocked(requireRole).mockRejectedValueOnce(new ForbiddenError());
+    const r = await updateSale(seedId, {
+      totalAmount: '2000.00',
+      payments: [{ method: 'efectivo', amount: '2000.00' }],
+    });
+    expect(r).toEqual({ ok: false, error: 'forbidden' });
+  });
+
+  it('returns not_found when sale id does not exist', async () => {
+    const r = await updateSale('00000000-0000-0000-0000-000000000000', {
+      totalAmount: '500.00',
+      payments: [{ method: 'efectivo', amount: '500.00' }],
+    });
+    expect(r).toEqual({ ok: false, error: 'not_found' });
+  });
+
+  it('replaces all payments and updates the total', async () => {
+    const seedId = await seedSale();
+    const r = await updateSale(seedId, {
+      totalAmount: '1500.00',
+      payments: [
+        { method: 'efectivo', amount: '500.00' },
+        { method: 'credito', amount: '1000.00', cardBrandId: visaId, installments: 3 },
+      ],
+    });
+    expect(r.ok).toBe(true);
+
+    const headRow = await db.select().from(sales).where(eq(sales.id, seedId));
+    expect(headRow[0]!.totalAmount).toBe('1500.00');
+
+    const paymentRows = await db
+      .select()
+      .from(salePayments)
+      .where(eq(salePayments.saleId, seedId));
+    expect(paymentRows).toHaveLength(2);
+    expect(paymentRows.find((p) => p.method === 'credito')?.installments).toBe(3);
+  });
+
+  it('returns sum_mismatch via zod when payments do not match the total', async () => {
+    const seedId = await seedSale();
+    const r = await updateSale(seedId, {
+      totalAmount: '1000.00',
+      payments: [{ method: 'efectivo', amount: '999.00' }],
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toBe('sum_mismatch');
+  });
+
+  it('accepts an editable saleDate inside the 60-day window', async () => {
+    const seedId = await seedSale();
+    const r = await updateSale(seedId, {
+      totalAmount: '1000.00',
+      payments: [{ method: 'efectivo', amount: '1000.00' }],
+      saleDate: todayInAppTZ(),
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it('rejects a saleDate outside the 60-day window with validation_error', async () => {
+    const seedId = await seedSale();
+    const r = await updateSale(seedId, {
+      totalAmount: '1000.00',
+      payments: [{ method: 'efectivo', amount: '1000.00' }],
+      saleDate: '2020-01-01',
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toBe('validation_error');
+  });
+});
+
+describe('deleteSale', () => {
+  it('returns unauthorized without session', async () => {
+    vi.mocked(requireRole).mockRejectedValueOnce(new UnauthorizedError());
+    const r = await deleteSale('00000000-0000-0000-0000-000000000000');
+    expect(r).toEqual({ ok: false, error: 'unauthorized' });
+  });
+
+  it('returns forbidden for cajero', async () => {
+    vi.mocked(requireRole).mockRejectedValueOnce(new ForbiddenError());
+    const r = await deleteSale('00000000-0000-0000-0000-000000000000');
+    expect(r).toEqual({ ok: false, error: 'forbidden' });
+  });
+
+  it('returns not_found when the id does not exist', async () => {
+    const r = await deleteSale('00000000-0000-0000-0000-000000000000');
+    expect(r).toEqual({ ok: false, error: 'not_found' });
+  });
+
+  it('hard-deletes the sale and cascades to payments', async () => {
+    const seedId = await seedSale();
+    const r = await deleteSale(seedId);
+    expect(r.ok).toBe(true);
+
+    const heads = await db.select().from(sales).where(eq(sales.id, seedId));
+    expect(heads).toHaveLength(0);
+
+    const payments = await db
+      .select()
+      .from(salePayments)
+      .where(eq(salePayments.saleId, seedId));
+    expect(payments).toHaveLength(0);
   });
 });

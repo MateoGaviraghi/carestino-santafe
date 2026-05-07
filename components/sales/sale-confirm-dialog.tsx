@@ -5,7 +5,7 @@ import { ArrowLeft, Check } from 'lucide-react';
 import { formatARS, safeDecimal } from '@/lib/money';
 import type { PaymentMethod } from '@/db/schema';
 import type { CardBrandOption } from '@/lib/queries/card-brands';
-import type { CreateSaleInput } from '@/lib/validators/sale';
+import type { UpdateSaleInput } from '@/lib/validators/sale';
 import { Button } from '@/components/ui/button';
 
 const METHOD_LABEL: Record<PaymentMethod, string> = {
@@ -16,14 +16,15 @@ const METHOD_LABEL: Record<PaymentMethod, string> = {
 };
 
 type Props = {
-  data: CreateSaleInput;
+  mode: 'create' | 'edit';
+  data: UpdateSaleInput;
   cardBrands: CardBrandOption[];
   isPending: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 };
 
-export function SaleConfirmDialog({ data, cardBrands, isPending, onConfirm, onCancel }: Props) {
+export function SaleConfirmDialog({ mode, data, cardBrands, isPending, onConfirm, onCancel }: Props) {
   // ESC closes (= edit) when not pending.
   useEffect(() => {
     if (isPending) return;
@@ -53,7 +54,9 @@ export function SaleConfirmDialog({ data, cardBrands, isPending, onConfirm, onCa
         onClick={(e) => e.stopPropagation()}
       >
         <header className="mb-5 text-center">
-          <h2 className="text-xl font-semibold tracking-tight">Confirmá la venta</h2>
+          <h2 className="text-xl font-semibold tracking-tight">
+            {mode === 'edit' ? 'Confirmá los cambios' : 'Confirmá la venta'}
+          </h2>
           <p className="mt-1 text-xs text-muted-foreground">
             Revisá los datos antes de guardar.
           </p>
@@ -97,6 +100,17 @@ export function SaleConfirmDialog({ data, cardBrands, isPending, onConfirm, onCa
           </ul>
         </div>
 
+        {data.saleDate && (
+          <div className="mb-4">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Fecha
+            </div>
+            <p className="rounded-input border border-border bg-muted/30 px-3 py-2 text-xs tabular-nums">
+              {data.saleDate}
+            </p>
+          </div>
+        )}
+
         {data.observations && data.observations.trim().length > 0 && (
           <div className="mb-4">
             <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -132,7 +146,7 @@ export function SaleConfirmDialog({ data, cardBrands, isPending, onConfirm, onCa
             ) : (
               <>
                 <Check className="mr-1 h-4 w-4" />
-                Confirmar venta
+                {mode === 'edit' ? 'Guardar cambios' : 'Confirmar venta'}
               </>
             )}
           </Button>

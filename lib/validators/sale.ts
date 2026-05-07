@@ -12,6 +12,10 @@ import { z } from 'zod';
 import { Decimal } from 'decimal.js';
 import { MONEY_REGEX, safeDecimal } from '@/lib/money';
 import { ALLOWED_INSTALLMENTS, PAYMENT_METHODS } from '@/db/schema';
+import { isValidDateString, isWithinDaysWindow } from '@/lib/dates';
+
+/** D-016: how far back super_admin can set sale_date on update. */
+export const SALE_DATE_EDIT_WINDOW_DAYS = 60;
 
 const moneyString = z
   .string()
@@ -115,3 +119,59 @@ export type CreateSaleInput = z.infer<typeof createSaleSchema>;
 export type PaymentInput = z.infer<typeof paymentInputSchema>;
 
 export const ALLOWED_INSTALLMENTS_LITERAL = ALLOWED_INSTALLMENTS;
+
+// -----------------------------------------------------------------------------
+// Update schema (V1 — D-016 + D-017).
+//
+// updateSaleSchema mirrors createSaleSchema but adds an optional `saleDate`
+// (YYYY-MM-DD) restricted to the last SALE_DATE_EDIT_WINDOW_DAYS days. The
+// original wall-clock TIME of the sale is preserved by the Server Action;
+// this validator only checks calendar correctness.
+// -----------------------------------------------------------------------------
+
+const editableSaleDateSchema = z
+  .string()
+  .refine(isValidDateString, { message: 'fecha_invalida' })
+  .refine((s) => isWithinDaysWindow(s, SALE_DATE_EDIT_WINDOW_DAYS), {
+    message: 'fecha_fuera_de_rango',
+  });
+
+export const updateSaleSchema = z
+  .object({
+    totalAmount: z
+      .string()
+      .min(1, 'requerido')
+      .regex(MONEY_REGEX, 'monto_invalido'),
+    observations: z.string().max(2000).optional(),
+    payments: z.array(paymentInputSchema).min(1, 'al_menos_un_pago'),
+    saleDate: editableSaleDateSchema.optional(),
+  })
+  .superRefine((data, ctx) => {
+    const total = safeDecimal(data.totalAmount);
+    if (total === null) return;
+
+    if (total.lte(0)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'total_no_positivo',
+        path: ['totalAmount'],
+      });
+      return;
+    }
+
+    let sum = new Decimal(0);
+    for (const p of data.payments) {
+      const amount = safeDecimal(p.amount);
+      if (amount === null) return;
+      sum = sum.plus(amount);
+    }
+    if (!sum.equals(total)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'sum_mismatch',
+        path: ['payments'],
+      });
+    }
+  });
+
+export type UpdateSaleInput = z.infer<typeof updateSaleSchema>;

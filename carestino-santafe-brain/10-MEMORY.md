@@ -84,6 +84,36 @@
 **How to apply:** never assume a fresh row in `users` is privileged. The source of truth for the role is still Clerk `publicMetadata.role`; the local mirror exists only for FK ergonomics.
 **Reconsider if:** we add an admin-only invite flow that pre-sets the role server-side before Clerk fires the event — at that point the default could be `null` and the webhook could reject events without a role.
 
+### D-016 — Admin-only date editing on UPDATE (60-day backwards window)
+
+**Date:** 2026-05-07
+**Why:** D-012 froze `sale_date` to `now()` on creation to keep MVP simple. V1 introduces `updateSale` (super_admin) and we need a way to fix the date of a misregistered sale (Mariano caught a typo a week later, end-of-month reconciliation surfaces an error from earlier in the period, etc.). Without backdating-on-edit, the only remediation path is direct SQL — which defeats the whole point of building edit/delete.
+**How to apply:**
+- `createSale` keeps server-set `sale_date = now()` — no change.
+- `updateSale` accepts an optional `saleDate` (string `YYYY-MM-DD`). When provided, validate `[today − 60 days, today]` interpreted in `America/Argentina/Cordoba`. Out of range → `validation_error`.
+- The original wall-clock TIME of the sale is preserved — only the calendar day moves. This avoids accidentally erasing the timestamp ordering inside a day's planilla and keeps the UX honest (the edit form shows a date picker, not a time picker).
+- Same window applies to `updateWithdrawal` and `updateExpense` when those land later in V1.
+**Reconsider if:** Mariano's accountant needs to fix sales older than 60 days at year-end. Easy widening to 90 days; full removal of the cap would require an audit log (V2) to be safe.
+
+### D-017 — Edit UX is a dedicated route, not a modal
+
+**Date:** 2026-05-07
+**Why:** the sale form has multiple dynamic rows (payments) plus a confirm dialog plus a success modal. Stacking that inside another modal would either trap focus poorly or get cramped on smaller screens. A dedicated route also makes the URL shareable ("manda el link de la venta a editar") and gives us natural state isolation per edit session.
+**How to apply:**
+- New route `app/ventas/[id]/editar/page.tsx`, super_admin-gated, redirects cashier to `/`.
+- Server component fetches the sale + payments + active card brands, maps to `CreateSaleInput`, renders `SaleForm` with `mode='edit'`, `defaultValues=...`, `saleId=...`.
+- `SaleForm` becomes a discriminated component. In `mode='edit'` it shows a date picker (per D-016) and switches the submit handler to `updateSale`. After success it navigates back to `/ventas/diaria` (instead of resetting in place).
+**Reconsider if:** mobile-only usage shows that a route change is too disruptive — but Carestino is a desktop-first internal tool, so unlikely.
+
+### D-018 — Delete policy: hard for transactions, soft for config
+
+**Date:** 2026-05-07
+**Why:** D-009 chose hard delete for transactions (sales) in MVP. V1 extends edit/delete to withdrawals and expenses; we need a single coherent policy across both transactional and config tables.
+**How to apply:**
+- **Hard delete with typed-confirmation modal ("ELIMINAR")** for `sales`, `withdrawals`, `expenses`. Children cascade via FK (`sale_payments` already has `ON DELETE CASCADE`; withdrawals and expenses have no children). Mistakes are recoverable for 7 days via Neon PITR (G-001). Soft-delete + audit log lands in V2.
+- **Soft delete (toggle `is_active = false`)** for `card_brands` and `withdrawal_persons`. These are referenced by historical transactional rows; hard-deleting them would either orphan the FK (if we drop the constraint, which we will not) or require deleting every historical reference (which destroys data Mariano legitimately needs). The MVP `card_brands` config UI already implements this pattern; V1 mirrors it for `withdrawal_persons`.
+**Reconsider if:** an audit log + soft-delete-everywhere model lands in V2 — at that point hard-delete is replaced by `deleted_at = now()` and an undelete affordance.
+
 ## Gotchas
 
 ### G-001 — Argentina time zone is constant

@@ -8,7 +8,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['**/*.test.ts', '**/*.test.tsx'],
-    exclude: ['node_modules', '.next', 'drizzle', 'playwright-report'],
+    exclude: ['node_modules', '.next', 'drizzle', 'playwright-report', '.claude/**'],
     globals: false,
     setupFiles: ['./vitest.setup.ts'],
   },

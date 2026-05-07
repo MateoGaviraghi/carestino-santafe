@@ -1,8 +1,14 @@
+import Link from 'next/link';
+import { Pencil } from 'lucide-react';
+
 import { formatTimeInAppTZ } from '@/lib/dates';
 import { formatARS } from '@/lib/money';
 import type { DailySale, DailySalePayment } from '@/lib/queries/sales';
 import type { PaymentMethod } from '@/db/schema';
+import type { Role } from '@/lib/auth';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { DeleteSaleButton } from '@/components/sales/delete-sale-button';
 
 const METHOD_LABEL: Record<PaymentMethod, string> = {
   efectivo: 'Efectivo',
@@ -31,10 +37,15 @@ function PaymentChip({ payment }: { payment: DailySalePayment }) {
   );
 }
 
-type Props = { sales: DailySale[] };
+type Props = {
+  sales: DailySale[];
+  /** Role of the viewer — gates the Acciones column. */
+  role: Role;
+};
 
-export function SalesTable({ sales }: Props) {
+export function SalesTable({ sales, role }: Props) {
   if (sales.length === 0) return null;
+  const showActions = role === 'super_admin';
 
   return (
     <div className="overflow-x-auto rounded-card border border-border">
@@ -53,6 +64,11 @@ export function SalesTable({ sales }: Props) {
             <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Observaciones
             </th>
+            {showActions && (
+              <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Acciones
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -77,6 +93,27 @@ export function SalesTable({ sales }: Props) {
               <td className="px-3 py-3 text-xs text-muted-foreground">
                 {s.observations || '—'}
               </td>
+              {showActions && (
+                <td className="whitespace-nowrap px-3 py-3 text-right">
+                  <div className="flex justify-end gap-1">
+                    <Link href={`/ventas/${s.id}/editar`}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Editar venta"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </Link>
+                    <DeleteSaleButton
+                      saleId={s.id}
+                      totalAmount={s.totalAmount}
+                      saleDate={s.saleDate}
+                    />
+                  </div>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>

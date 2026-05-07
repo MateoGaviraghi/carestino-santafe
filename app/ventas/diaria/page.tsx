@@ -5,6 +5,7 @@ import {
   ForbiddenError,
   UnauthorizedError,
   getSessionUser,
+  type SessionUser,
 } from '@/lib/auth';
 import {
   dayRangeInAppTZ,
@@ -33,9 +34,10 @@ export default async function DailySalesPage({
 }: {
   searchParams: SearchParams;
 }) {
-  // Both roles can read the daily sheet — admin gets edit affordances later.
+  // Both roles can read the daily sheet — admin gets edit/delete affordances.
+  let user: SessionUser;
   try {
-    await getSessionUser();
+    user = await getSessionUser();
   } catch (e) {
     if (e instanceof UnauthorizedError) redirect('/');
     if (e instanceof ForbiddenError) redirect('/');
@@ -129,7 +131,7 @@ export default async function DailySalesPage({
           )}
         </div>
       ) : (
-        <SalesTable sales={sales} />
+        <SalesTable sales={sales} role={user.role} />
       )}
     </main>
   );

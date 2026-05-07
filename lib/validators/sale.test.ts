@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { createSaleSchema, paymentInputSchema } from './sale';
+import {
+  createSaleSchema,
+  paymentInputSchema,
+  updateSaleSchema,
+} from './sale';
+import { todayInAppTZ } from '@/lib/dates';
 
 const ok = (input: unknown) => createSaleSchema.safeParse(input);
+const okUpdate = (input: unknown) => updateSaleSchema.safeParse(input);
 const okPayment = (input: unknown) => paymentInputSchema.safeParse(input);
 
 describe('createSaleSchema', () => {
@@ -145,5 +151,73 @@ describe('createSaleSchema', () => {
       ],
     });
     expect(r.success).toBe(true);
+  });
+});
+
+describe('updateSaleSchema', () => {
+  const validPayment = { method: 'efectivo', amount: '1000.00' } as const;
+
+  it('accepts the same shape as createSale (no saleDate)', () => {
+    const r = okUpdate({ totalAmount: '1000.00', payments: [validPayment] });
+    expect(r.success).toBe(true);
+  });
+
+  it('accepts an explicit saleDate inside the 60-day window', () => {
+    const r = okUpdate({
+      totalAmount: '1000.00',
+      payments: [validPayment],
+      saleDate: todayInAppTZ(),
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it('rejects a saleDate older than 60 days', () => {
+    const today = todayInAppTZ();
+    const [y, m, d] = today.split('-').map(Number) as [number, number, number];
+    const past = new Date(Date.UTC(y, m - 1, d - 90, 12));
+    const pastStr = past.toISOString().slice(0, 10);
+    const r = okUpdate({
+      totalAmount: '1000.00',
+      payments: [validPayment],
+      saleDate: pastStr,
+    });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(r.error.issues.some((i) => i.message === 'fecha_fuera_de_rango')).toBe(true);
+    }
+  });
+
+  it('rejects a saleDate in the future', () => {
+    const today = todayInAppTZ();
+    const [y, m, d] = today.split('-').map(Number) as [number, number, number];
+    const future = new Date(Date.UTC(y, m - 1, d + 1, 12));
+    const futureStr = future.toISOString().slice(0, 10);
+    const r = okUpdate({
+      totalAmount: '1000.00',
+      payments: [validPayment],
+      saleDate: futureStr,
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it('rejects a malformed saleDate', () => {
+    const r = okUpdate({
+      totalAmount: '1000.00',
+      payments: [validPayment],
+      saleDate: '2026/05/07',
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it('keeps the sum invariant in edit mode', () => {
+    const r = okUpdate({
+      totalAmount: '1000.00',
+      payments: [{ method: 'efectivo', amount: '999.00' }],
+      saleDate: todayInAppTZ(),
+    });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(r.error.issues.some((i) => i.message === 'sum_mismatch')).toBe(true);
+    }
   });
 });

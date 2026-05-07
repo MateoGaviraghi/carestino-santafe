@@ -260,3 +260,60 @@ export async function listDailySales(
     payments: grouped.get(h.id) ?? [],
   }));
 }
+
+// -----------------------------------------------------------------------------
+// V1: read a single sale + its payments, shaped for the edit form (D-017).
+// Returns null when not found.
+// -----------------------------------------------------------------------------
+
+export type SaleForEdit = {
+  id: string;
+  saleDate: Date;
+  totalAmount: string;
+  observations: string | null;
+  payments: Array<{
+    method: PaymentMethod;
+    amount: string;
+    cardBrandId: number | null;
+    installments: number | null;
+  }>;
+};
+
+export async function getSaleForEdit(id: string): Promise<SaleForEdit | null> {
+  const db = getDb();
+  const heads = await db
+    .select({
+      id: sales.id,
+      totalAmount: sales.totalAmount,
+      observations: sales.observations,
+      saleDate: sales.saleDate,
+    })
+    .from(sales)
+    .where(eq(sales.id, id));
+  const head = heads[0];
+  if (!head) return null;
+
+  const paymentRows = await db
+    .select({
+      method: salePayments.method,
+      amount: salePayments.amount,
+      cardBrandId: salePayments.cardBrandId,
+      installments: salePayments.installments,
+    })
+    .from(salePayments)
+    .where(eq(salePayments.saleId, id))
+    .orderBy(asc(salePayments.method));
+
+  return {
+    id: head.id,
+    saleDate: head.saleDate,
+    totalAmount: head.totalAmount,
+    observations: head.observations,
+    payments: paymentRows.map((p) => ({
+      method: p.method as PaymentMethod,
+      amount: p.amount,
+      cardBrandId: p.cardBrandId,
+      installments: p.installments,
+    })),
+  };
+}

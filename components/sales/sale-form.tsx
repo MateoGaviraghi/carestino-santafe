@@ -7,12 +7,14 @@
  * The same zod schema runs again server-side (lib/validators/sale.ts) and
  * the DB trigger is the third backstop.
  *
- * UX rules from 06-UI-UX.md:
- *   - Total autofocused.
- *   - Defaults to a single payment row (efectivo).
- *   - Live "Restante: $X" indicator turns green at 0, red otherwise.
- *   - Save disabled while remaining ≠ 0.
- *   - On success: message, form resets, focus returns to total.
+ * Two modes (D-017):
+ *   - create: submitted to createSale, resets on success, stays in /ventas/nueva.
+ *   - edit:   submitted to updateSale, redirects to /ventas/diaria on success.
+ *             Renders an extra date picker (D-016 — last 60 days, super_admin).
+ *
+ * The form always uses updateSaleSchema as the resolver because it is a
+ * strict superset of createSaleSchema (saleDate is optional). Create mode
+ * simply never populates saleDate.
  */
 import { useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
@@ -21,8 +23,16 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Decimal } from 'decimal.js';
 import { Trash2 } from 'lucide-react';
 
-import { createSale, type ActionError } from '@/app/actions/sales';
-import { createSaleSchema, type CreateSaleInput } from '@/lib/validators/sale';
+import {
+  createSale,
+  updateSale,
+  type ActionError,
+} from '@/app/actions/sales';
+import {
+  updateSaleSchema,
+  type CreateSaleInput,
+  type UpdateSaleInput,
+} from '@/lib/validators/sale';
 import { formatARS, safeDecimal } from '@/lib/money';
 import { PAYMENT_METHODS, type PaymentMethod } from '@/db/schema';
 import type { CardBrandOption } from '@/lib/queries/card-brands';
@@ -57,15 +67,27 @@ const EMPTY_PAYMENT: CreateSaleInput['payments'][number] = {
   amount: '',
 };
 
-const EMPTY_FORM: CreateSaleInput = {
+const EMPTY_FORM: UpdateSaleInput = {
   totalAmount: '',
   observations: '',
   payments: [EMPTY_PAYMENT],
+  saleDate: undefined,
 };
 
-type Props = { cardBrands: CardBrandOption[] };
+type Props =
+  | {
+      mode: 'create';
+      cardBrands: CardBrandOption[];
+    }
+  | {
+      mode: 'edit';
+      cardBrands: CardBrandOption[];
+      saleId: string;
+      defaultValues: UpdateSaleInput;
+    };
 
-export function SaleForm({ cardBrands }: Props) {
+export function SaleForm(props: Props) {
+  const { mode, cardBrands } = props;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -73,18 +95,20 @@ export function SaleForm({ cardBrands }: Props) {
     amount: string;
     saleId: string;
   } | null>(null);
-  const [pendingConfirm, setPendingConfirm] = useState<CreateSaleInput | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<UpdateSaleInput | null>(null);
   const totalInputRef = useRef<HTMLInputElement | null>(null);
 
-  const form = useForm<CreateSaleInput>({
-    resolver: zodResolver(createSaleSchema),
+  const initialValues =
+    mode === 'edit' ? props.defaultValues : EMPTY_FORM;
+
+  const form = useForm<UpdateSaleInput>({
+    resolver: zodResolver(updateSaleSchema),
     mode: 'onSubmit',
-    defaultValues: EMPTY_FORM,
+    defaultValues: initialValues,
   });
   const { register, control, handleSubmit, reset, formState, setValue } = form;
   const { fields, append, remove } = useFieldArray({ control, name: 'payments' });
 
-  // Live values for the remaining indicator.
   const totalAmount = useWatch({ control, name: 'totalAmount' });
   const payments = useWatch({ control, name: 'payments' });
 
@@ -105,13 +129,10 @@ export function SaleForm({ cardBrands }: Props) {
   const totalIsPositive = totalDecimal.gt(0);
   const canSubmit = totalIsPositive && remainingIsZero && !isPending;
 
-  const handleAddPayment = () => {
-    append({ method: 'efectivo', amount: '' });
-  };
+  const handleAddPayment = () => append({ method: 'efectivo', amount: '' });
 
   const onMethodChange = (index: number, value: PaymentMethod) => {
     setValue(`payments.${index}.method`, value, { shouldValidate: false });
-    // Clear card_brand / installments when not applicable.
     if (value === 'efectivo' || value === 'transferencia') {
       setValue(`payments.${index}.cardBrandId`, undefined);
       setValue(`payments.${index}.installments`, undefined);
@@ -120,35 +141,49 @@ export function SaleForm({ cardBrands }: Props) {
     }
   };
 
-  // Submit opens the confirm dialog (instead of saving directly), so the
-  // cashier always reviews what's about to be persisted.
   const onSubmit = handleSubmit(
     (data) => {
       setErrorMessage(null);
       setPendingConfirm(data);
     },
-    () => {
-      setErrorMessage('Revisá los campos marcados.');
-    },
+    () => setErrorMessage('Revisá los campos marcados.'),
   );
 
-  // Final commit — fires when the user clicks "Confirmar venta" in the dialog.
   const handleConfirm = () => {
     if (!pendingConfirm) return;
     const data = pendingConfirm;
     startTransition(async () => {
-      const result = await createSale(data);
-      if (result.ok) {
-        setPendingConfirm(null);
-        setSuccessToast({ amount: data.totalAmount, saleId: result.data.saleId });
-        reset(EMPTY_FORM);
-        totalInputRef.current?.focus();
-        router.refresh();
+      if (mode === 'create') {
+        const result = await createSale(data);
+        if (result.ok) {
+          setPendingConfirm(null);
+          setSuccessToast({ amount: data.totalAmount, saleId: result.data.saleId });
+          reset(EMPTY_FORM);
+          totalInputRef.current?.focus();
+          router.refresh();
+        } else {
+          setPendingConfirm(null);
+          setErrorMessage(
+            ACTION_MESSAGE[result.error] + (result.message ? ` — ${result.message}` : ''),
+          );
+        }
       } else {
-        setPendingConfirm(null);
-        setErrorMessage(
-          ACTION_MESSAGE[result.error] + (result.message ? ` — ${result.message}` : ''),
-        );
+        const result = await updateSale(props.saleId, data);
+        if (result.ok) {
+          setPendingConfirm(null);
+          setSuccessToast({ amount: data.totalAmount, saleId: result.data.saleId });
+          // Redirect back to the daily sheet after a brief moment so the user
+          // sees the success modal land before navigating away.
+          setTimeout(() => {
+            router.push('/ventas/diaria');
+            router.refresh();
+          }, 1200);
+        } else {
+          setPendingConfirm(null);
+          setErrorMessage(
+            ACTION_MESSAGE[result.error] + (result.message ? ` — ${result.message}` : ''),
+          );
+        }
       }
     });
   };
@@ -181,6 +216,25 @@ export function SaleForm({ cardBrands }: Props) {
           <p className="text-xs text-destructive">{formState.errors.totalAmount.message}</p>
         )}
       </div>
+
+      {/* Sale date — edit mode only (D-016) */}
+      {mode === 'edit' && (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="saleDate">Fecha de la venta</Label>
+          <Input
+            id="saleDate"
+            type="date"
+            aria-invalid={Boolean(formState.errors.saleDate)}
+            {...register('saleDate')}
+          />
+          <p className="text-xs text-muted-foreground">
+            Solo se puede mover la fecha hasta 60 días hacia atrás. La hora original se preserva.
+          </p>
+          {formState.errors.saleDate && (
+            <p className="text-xs text-destructive">{formState.errors.saleDate.message}</p>
+          )}
+        </div>
+      )}
 
       {/* Payments */}
       <fieldset className="space-y-3">
@@ -380,6 +434,7 @@ export function SaleForm({ cardBrands }: Props) {
 
       {pendingConfirm && (
         <SaleConfirmDialog
+          mode={mode}
           data={pendingConfirm}
           cardBrands={cardBrands}
           isPending={isPending}

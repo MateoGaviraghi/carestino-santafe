@@ -67,6 +67,29 @@ export function formatDateInAppTZ(date: Date): string {
   return formatInTimeZone(date, APP_TZ, 'yyyy-MM-dd');
 }
 
+/**
+ * Returns true if `dateStr` (YYYY-MM-DD) is within the last `days` days
+ * up to and including today in APP_TZ. Used by D-016 (editable window
+ * for sale_date on update — 60 days backwards).
+ *
+ * Uses string lexicographic comparison after computing today and the
+ * minimum date as YYYY-MM-DD strings, so it's TZ-safe even across DST
+ * boundaries (Cordoba doesn't observe DST anyway, but the logic stays
+ * portable).
+ */
+export function isWithinDaysWindow(dateStr: string, days: number): boolean {
+  if (!isValidDateString(dateStr)) return false;
+  const today = todayInAppTZ();
+  // Compute today minus N days as YYYY-MM-DD by anchoring at noon UTC
+  // (so adding/subtracting days never crosses a date boundary by accident).
+  const [y, m, d] = today.split('-').map(Number) as [number, number, number];
+  const anchor = new Date(Date.UTC(y, m - 1, d, 12));
+  const min = new Date(anchor);
+  min.setUTCDate(min.getUTCDate() - days);
+  const minStr = formatInTimeZone(min, 'UTC', 'yyyy-MM-dd');
+  return dateStr >= minStr && dateStr <= today;
+}
+
 /** Long Spanish-friendly date e.g. "jueves 7 de mayo de 2026". */
 export function formatLongDateInAppTZ(dateStr: string): string {
   if (!isValidDateString(dateStr)) return dateStr;

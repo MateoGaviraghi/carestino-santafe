@@ -39,7 +39,7 @@ export default async function NewSalePage() {
         </div>
       </header>
 
-      <SaleForm cardBrands={cardBrands} />
+      <SaleForm mode="create" cardBrands={cardBrands} />
     </main>
   );
 }
