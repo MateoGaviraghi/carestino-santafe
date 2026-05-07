@@ -139,6 +139,49 @@ export const salePayments = pgTable(
 );
 
 // -----------------------------------------------------------------------------
+// withdrawal_persons — config table editable by super_admin (V1).
+// Soft-delete via is_active to preserve FK in historical withdrawals (D-018).
+// -----------------------------------------------------------------------------
+
+export const withdrawalPersons = pgTable('withdrawal_persons', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull().unique(),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// -----------------------------------------------------------------------------
+// withdrawals — single-row transaction (no children, no sum invariant).
+// Money: numeric(12,2) → string in code (D-003).
+// -----------------------------------------------------------------------------
+
+export const withdrawals = pgTable(
+  'withdrawals',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+    personId: integer('person_id')
+      .notNull()
+      .references(() => withdrawalPersons.id),
+    withdrawalDate: timestamp('withdrawal_date', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('withdrawals_amount_positive', sql`${t.amount} > 0`),
+    index('withdrawals_withdrawal_date_idx').on(desc(t.withdrawalDate)),
+    index('withdrawals_person_id_withdrawal_date_idx').on(
+      t.personId,
+      desc(t.withdrawalDate),
+    ),
+  ],
+);
+
+// -----------------------------------------------------------------------------
 // Inferred types for use in queries and validators.
 // -----------------------------------------------------------------------------
 
@@ -150,3 +193,7 @@ export type Sale = typeof sales.$inferSelect;
 export type NewSale = typeof sales.$inferInsert;
 export type SalePayment = typeof salePayments.$inferSelect;
 export type NewSalePayment = typeof salePayments.$inferInsert;
+export type WithdrawalPerson = typeof withdrawalPersons.$inferSelect;
+export type NewWithdrawalPerson = typeof withdrawalPersons.$inferInsert;
+export type Withdrawal = typeof withdrawals.$inferSelect;
+export type NewWithdrawal = typeof withdrawals.$inferInsert;

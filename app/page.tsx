@@ -78,32 +78,88 @@ export default async function HomePage() {
               </p>
             </div>
 
-            {roleOk && (
-              <>
-                <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
+            <div className="mt-8 space-y-4 text-left">
+              {/* Sales section */}
+              <div>
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Ventas
+                </div>
+                <div className="flex flex-wrap gap-2">
                   <Link
                     href="/ventas/nueva"
-                    className="inline-flex items-center justify-center rounded-input bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    className="inline-flex items-center rounded-input bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
                   >
                     + Nueva venta
                   </Link>
                   <Link
                     href="/ventas/diaria"
-                    className="inline-flex items-center justify-center rounded-input border border-border bg-background px-5 py-2.5 text-sm font-medium text-foreground transition hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    className="inline-flex items-center rounded-input border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted"
                   >
                     Planilla diaria
                   </Link>
                 </div>
-                <div className="mt-3 flex justify-center">
-                  <Link
-                    href="/configuracion/marcas-de-tarjeta"
-                    className="text-xs uppercase tracking-wide text-muted-foreground hover:text-foreground"
-                  >
-                    Configuración → Marcas de tarjeta
-                  </Link>
+              </div>
+
+              {/* Withdrawals section */}
+              <div>
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Retiros
                 </div>
-              </>
-            )}
+                <div className="flex flex-wrap gap-2">
+                  <Link
+                    href="/retiros/nuevo"
+                    className="inline-flex items-center rounded-input bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+                  >
+                    + Nuevo retiro
+                  </Link>
+                  {roleOk && (
+                    <>
+                      <Link
+                        href="/retiros/diaria"
+                        className="inline-flex items-center rounded-input border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted"
+                      >
+                        Diaria
+                      </Link>
+                      <Link
+                        href="/retiros/mensual"
+                        className="inline-flex items-center rounded-input border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted"
+                      >
+                        Mensual
+                      </Link>
+                      <Link
+                        href="/retiros/anual"
+                        className="inline-flex items-center rounded-input border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted"
+                      >
+                        Anual
+                      </Link>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Configuration links — admin only */}
+              {roleOk && (
+                <div>
+                  <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Configuración
+                  </div>
+                  <div className="flex flex-wrap gap-3 text-xs">
+                    <Link
+                      href="/configuracion/marcas-de-tarjeta"
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      Marcas de tarjeta
+                    </Link>
+                    <Link
+                      href="/configuracion/personas-que-retiran"
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      Personas que retiran
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </div>
           </SignedIn>
         </div>
       </div>

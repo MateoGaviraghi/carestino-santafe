@@ -10,7 +10,7 @@ import { eq } from 'drizzle-orm';
 import { ZodError } from 'zod';
 
 import { getDb } from '@/db';
-import { cardBrands } from '@/db/schema';
+import { cardBrands, withdrawalPersons } from '@/db/schema';
 import {
   ForbiddenError,
   UnauthorizedError,
@@ -33,6 +33,11 @@ export type ConfigResult<T> =
 const REVALIDATE_PATHS = [
   '/configuracion/marcas-de-tarjeta',
   '/ventas/nueva', // sale form's brand dropdown depends on the active list
+];
+
+const WITHDRAWAL_PERSON_REVALIDATE_PATHS = [
+  '/configuracion/personas-que-retiran',
+  '/retiros/nuevo', // withdrawal form's person dropdown depends on the active list
 ];
 
 /** Postgres SQLSTATE 23505 (unique_violation), surfaced through Drizzle/Neon. */
@@ -135,6 +140,90 @@ export async function setCardBrandActive(
     return { ok: true, data: undefined };
   } catch (e) {
     console.error('setCardBrandActive failed:', e);
+    return { ok: false, error: 'internal_error' };
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Withdrawal persons (V1) — same shape as card brands.
+// -----------------------------------------------------------------------------
+
+export async function addWithdrawalPerson(
+  name: string,
+): Promise<ConfigResult<{ id: number }>> {
+  const gated = await gateAdmin();
+  if (gated) return gated;
+
+  let parsed: string;
+  try {
+    parsed = cardBrandNameSchema.parse(name); // same shape rule as brand names
+  } catch (e) {
+    if (e instanceof ZodError) {
+      return {
+        ok: false,
+        error: 'validation_error',
+        message: e.issues.map((i) => i.message).join('; '),
+      };
+    }
+    throw e;
+  }
+
+  const db = getDb();
+  try {
+    const inserted = await db
+      .insert(withdrawalPersons)
+      .values({ name: parsed, isActive: true })
+      .returning({ id: withdrawalPersons.id });
+    const head = inserted[0];
+    if (!head) throw new Error('insert_returned_no_row');
+    WITHDRAWAL_PERSON_REVALIDATE_PATHS.forEach((p) => revalidatePath(p));
+    return { ok: true, data: { id: head.id } };
+  } catch (e) {
+    if (isUniqueViolation(e)) {
+      return {
+        ok: false,
+        error: 'already_exists',
+        message: `Ya existe una persona con el nombre "${parsed}".`,
+      };
+    }
+    console.error('addWithdrawalPerson failed:', e);
+    return { ok: false, error: 'internal_error' };
+  }
+}
+
+export async function addWithdrawalPersonFormAction(
+  _prev: ConfigResult<{ id: number }> | null,
+  formData: FormData,
+): Promise<ConfigResult<{ id: number }>> {
+  const name = formData.get('name')?.toString() ?? '';
+  return addWithdrawalPerson(name);
+}
+
+export async function setWithdrawalPersonActive(
+  id: number,
+  isActive: boolean,
+): Promise<ConfigResult<void>> {
+  const gated = await gateAdmin();
+  if (gated) return gated;
+
+  if (!Number.isInteger(id) || id <= 0) {
+    return { ok: false, error: 'validation_error', message: 'id_invalido' };
+  }
+
+  const db = getDb();
+  try {
+    const updated = await db
+      .update(withdrawalPersons)
+      .set({ isActive })
+      .where(eq(withdrawalPersons.id, id))
+      .returning({ id: withdrawalPersons.id });
+    if (updated.length === 0) {
+      return { ok: false, error: 'not_found' };
+    }
+    WITHDRAWAL_PERSON_REVALIDATE_PATHS.forEach((p) => revalidatePath(p));
+    return { ok: true, data: undefined };
+  } catch (e) {
+    console.error('setWithdrawalPersonActive failed:', e);
     return { ok: false, error: 'internal_error' };
   }
 }
