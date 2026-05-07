@@ -79,20 +79,30 @@ export default async function HomePage() {
             </div>
 
             {roleOk && (
-              <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
-                <Link
-                  href="/ventas/nueva"
-                  className="inline-flex items-center justify-center rounded-input bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                >
-                  + Nueva venta
-                </Link>
-                <Link
-                  href="/ventas/diaria"
-                  className="inline-flex items-center justify-center rounded-input border border-border bg-background px-5 py-2.5 text-sm font-medium text-foreground transition hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                >
-                  Planilla diaria
-                </Link>
-              </div>
+              <>
+                <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
+                  <Link
+                    href="/ventas/nueva"
+                    className="inline-flex items-center justify-center rounded-input bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  >
+                    + Nueva venta
+                  </Link>
+                  <Link
+                    href="/ventas/diaria"
+                    className="inline-flex items-center justify-center rounded-input border border-border bg-background px-5 py-2.5 text-sm font-medium text-foreground transition hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  >
+                    Planilla diaria
+                  </Link>
+                </div>
+                <div className="mt-3 flex justify-center">
+                  <Link
+                    href="/configuracion/marcas-de-tarjeta"
+                    className="text-xs uppercase tracking-wide text-muted-foreground hover:text-foreground"
+                  >
+                    Configuración → Marcas de tarjeta
+                  </Link>
+                </div>
+              </>
             )}
           </SignedIn>
         </div>
