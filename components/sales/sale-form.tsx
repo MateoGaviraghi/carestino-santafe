@@ -93,7 +93,7 @@ export function SaleForm(props: Props) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successToast, setSuccessToast] = useState<{
     amount: string;
-    saleId: string;
+    referenceId: string;
   } | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<UpdateSaleInput | null>(null);
   const totalInputRef = useRef<HTMLInputElement | null>(null);
@@ -157,7 +157,7 @@ export function SaleForm(props: Props) {
         const result = await createSale(data);
         if (result.ok) {
           setPendingConfirm(null);
-          setSuccessToast({ amount: data.totalAmount, saleId: result.data.saleId });
+          setSuccessToast({ amount: data.totalAmount, referenceId: result.data.saleId });
           reset(EMPTY_FORM);
           totalInputRef.current?.focus();
           router.refresh();
@@ -171,7 +171,7 @@ export function SaleForm(props: Props) {
         const result = await updateSale(props.saleId, data);
         if (result.ok) {
           setPendingConfirm(null);
-          setSuccessToast({ amount: data.totalAmount, saleId: result.data.saleId });
+          setSuccessToast({ amount: data.totalAmount, referenceId: result.data.saleId });
           // Redirect back to the daily sheet after a brief moment so the user
           // sees the success modal land before navigating away.
           setTimeout(() => {
@@ -426,8 +426,9 @@ export function SaleForm(props: Props) {
 
       {successToast && (
         <SuccessToast
+          title="Venta registrada"
           amount={successToast.amount}
-          saleId={successToast.saleId}
+          referenceId={successToast.referenceId}
           onClose={() => setSuccessToast(null)}
         />
       )}

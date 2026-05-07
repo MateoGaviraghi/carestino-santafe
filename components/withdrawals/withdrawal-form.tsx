@@ -1,10 +1,10 @@
 'use client';
 
 /**
- * Withdrawal form (cashier + admin in create mode; super_admin only in edit mode).
+ * Withdrawal form (cashier + admin in create mode; super_admin only in edit).
  *
- * Three fields: monto, persona (select), fecha (only in edit mode — D-016).
- * No confirm dialog — withdrawals are intentionally fast (<5s per the UX spec).
+ * Three fields: monto, persona, fecha (only in edit). Confirm-before-save
+ * dialog matches the sales flow so users always review before persisting.
  */
 import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
@@ -28,6 +28,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { SuccessToast } from '@/components/ui/success-toast';
+import { WithdrawalConfirmDialog } from '@/components/withdrawals/withdrawal-confirm-dialog';
 
 const ACTION_MESSAGE: Record<WithdrawalActionError, string> = {
   unauthorized: 'No estás autenticado.',
@@ -63,8 +64,9 @@ export function WithdrawalForm(props: Props) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successToast, setSuccessToast] = useState<{
     amount: string;
-    saleId: string;
+    referenceId: string;
   } | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<UpdateWithdrawalInput | null>(null);
   const amountRef = useRef<HTMLInputElement | null>(null);
 
   const initial = mode === 'edit' ? props.defaultValues : EMPTY_FORM;
@@ -80,33 +82,40 @@ export function WithdrawalForm(props: Props) {
   const onSubmit = handleSubmit(
     (data) => {
       setErrorMessage(null);
-      startTransition(async () => {
-        const result =
-          mode === 'create'
-            ? await createWithdrawal(data)
-            : await updateWithdrawal(props.withdrawalId, data);
-        if (result.ok) {
-          if (mode === 'create') {
-            setSuccessToast({ amount: data.amount, saleId: result.data.withdrawalId });
-            reset(EMPTY_FORM);
-            amountRef.current?.focus();
-            router.refresh();
-          } else {
-            setSuccessToast({ amount: data.amount, saleId: result.data.withdrawalId });
-            setTimeout(() => {
-              router.push('/retiros/diaria');
-              router.refresh();
-            }, 1200);
-          }
-        } else {
-          setErrorMessage(
-            ACTION_MESSAGE[result.error] + (result.message ? ` — ${result.message}` : ''),
-          );
-        }
-      });
+      setPendingConfirm(data);
     },
     () => setErrorMessage('Revisá los campos marcados.'),
   );
+
+  const handleConfirm = () => {
+    if (!pendingConfirm) return;
+    const data = pendingConfirm;
+    startTransition(async () => {
+      const result =
+        mode === 'create'
+          ? await createWithdrawal(data)
+          : await updateWithdrawal(props.withdrawalId, data);
+      if (result.ok) {
+        setPendingConfirm(null);
+        setSuccessToast({ amount: data.amount, referenceId: result.data.withdrawalId });
+        if (mode === 'create') {
+          reset(EMPTY_FORM);
+          amountRef.current?.focus();
+          router.refresh();
+        } else {
+          setTimeout(() => {
+            router.push('/retiros/diaria');
+            router.refresh();
+          }, 1200);
+        }
+      } else {
+        setPendingConfirm(null);
+        setErrorMessage(
+          ACTION_MESSAGE[result.error] + (result.message ? ` — ${result.message}` : ''),
+        );
+      }
+    });
+  };
 
   const amountDecimal = safeDecimal(watchedAmount) ?? new Decimal(0);
   const canSubmit = amountDecimal.gt(0) && !isPending;
@@ -194,15 +203,27 @@ export function WithdrawalForm(props: Props) {
 
       {successToast && (
         <SuccessToast
+          title="Retiro registrado"
           amount={successToast.amount}
-          saleId={successToast.saleId}
+          referenceId={successToast.referenceId}
           onClose={() => setSuccessToast(null)}
+        />
+      )}
+
+      {pendingConfirm && (
+        <WithdrawalConfirmDialog
+          mode={mode}
+          data={pendingConfirm}
+          persons={persons}
+          isPending={isPending}
+          onConfirm={handleConfirm}
+          onCancel={() => setPendingConfirm(null)}
         />
       )}
 
       <div className="flex justify-end">
         <Button type="submit" disabled={!canSubmit}>
-          {isPending ? 'Guardando…' : mode === 'edit' ? 'Guardar cambios' : 'Registrar retiro'}
+          Continuar →
         </Button>
       </div>
     </form>
