@@ -12,3 +12,12 @@ export async function GET() {
     return NextResponse.json({ ok: false, db: 'down' }, { status: 503 });
   }
 }
+
+export async function HEAD() {
+  try {
+    await getSql()`SELECT 1`;
+    return new Response(null, { status: 200 });
+  } catch {
+    return new Response(null, { status: 503 });
+  }
+}
