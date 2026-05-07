@@ -13,11 +13,13 @@ import type { DailySale, DailyTotals } from '@/lib/queries/sales';
 
 vi.mock('@/lib/auth', async () => {
   const actual = await vi.importActual<typeof import('@/lib/auth')>('@/lib/auth');
-  return { ...actual, getSessionUser: vi.fn() };
+  return { ...actual, getSessionUser: vi.fn(), requireRole: vi.fn() };
 });
 vi.mock('@/lib/queries/sales', () => ({
   getDailySalesTotals: vi.fn(),
   listDailySales: vi.fn(),
+  getMonthlySales: vi.fn(),
+  getAnnualSales: vi.fn(),
 }));
 
 const { getSessionUser } = await import('@/lib/auth');
@@ -91,7 +93,7 @@ describe('GET /api/export/sales', () => {
   });
 
   it('returns 400 for an unsupported period', async () => {
-    const r = await GET(makeReq('period=monthly&date=2026-04-01&format=xlsx'));
+    const r = await GET(makeReq('period=quarterly&date=2026-04-01&format=xlsx'));
     expect(r.status).toBe(400);
     const body = await r.json();
     expect(body.error).toBe('unsupported_period');

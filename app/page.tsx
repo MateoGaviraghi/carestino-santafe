@@ -97,6 +97,22 @@ export default async function HomePage() {
                   >
                     Planilla diaria
                   </Link>
+                  {roleOk && (
+                    <>
+                      <Link
+                        href="/ventas/mensual"
+                        className="inline-flex items-center rounded-input border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted"
+                      >
+                        Mensual
+                      </Link>
+                      <Link
+                        href="/ventas/anual"
+                        className="inline-flex items-center rounded-input border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted"
+                      >
+                        Anual
+                      </Link>
+                    </>
+                  )}
                 </div>
               </div>
 

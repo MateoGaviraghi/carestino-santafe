@@ -279,6 +279,83 @@ export type SaleForEdit = {
   }>;
 };
 
+// -----------------------------------------------------------------------------
+// Monthly + annual aggregations (V1 step 4 — drill-down sheets).
+//
+// Per-method breakdown grouped by day-of-month or month-of-year in APP_TZ.
+// Uses SUM(sale_payments.amount) for the totals — equivalent to
+// SUM(sales.total_amount) under the sum invariant (G-006).
+// -----------------------------------------------------------------------------
+
+export type AggregatePerMethodRow = {
+  /** YYYY-MM-DD for monthly, YYYY-MM for annual. */
+  bucket: string;
+  salesCount: number;
+  salesTotal: string;
+  perMethod: {
+    efectivo: string;
+    transferencia: string;
+    debito: string;
+    credito1: string;
+    credito3: string;
+    credito6: string;
+  };
+};
+
+async function getSalesAggregate(
+  start: Date,
+  end: Date,
+  trunc: 'day' | 'month',
+  bucketFmt: string,
+): Promise<AggregatePerMethodRow[]> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      bucket: sql<string>`to_char(date_trunc(${trunc}, ${sales.saleDate} AT TIME ZONE 'America/Argentina/Cordoba'), ${bucketFmt})`,
+      salesCount: sql<number>`COUNT(DISTINCT ${sales.id})::int`,
+      salesTotal: sql<string>`COALESCE(SUM(${salePayments.amount}), 0)::text`,
+      cash: sql<string>`COALESCE(SUM(CASE WHEN ${salePayments.method} = 'efectivo' THEN ${salePayments.amount} ELSE 0 END), 0)::text`,
+      transfer: sql<string>`COALESCE(SUM(CASE WHEN ${salePayments.method} = 'transferencia' THEN ${salePayments.amount} ELSE 0 END), 0)::text`,
+      debit: sql<string>`COALESCE(SUM(CASE WHEN ${salePayments.method} = 'debito' THEN ${salePayments.amount} ELSE 0 END), 0)::text`,
+      credit1: sql<string>`COALESCE(SUM(CASE WHEN ${salePayments.method} = 'credito' AND ${salePayments.installments} = 1 THEN ${salePayments.amount} ELSE 0 END), 0)::text`,
+      credit3: sql<string>`COALESCE(SUM(CASE WHEN ${salePayments.method} = 'credito' AND ${salePayments.installments} = 3 THEN ${salePayments.amount} ELSE 0 END), 0)::text`,
+      credit6: sql<string>`COALESCE(SUM(CASE WHEN ${salePayments.method} = 'credito' AND ${salePayments.installments} = 6 THEN ${salePayments.amount} ELSE 0 END), 0)::text`,
+    })
+    .from(sales)
+    .leftJoin(salePayments, eq(salePayments.saleId, sales.id))
+    .where(and(gte(sales.saleDate, start), lt(sales.saleDate, end)))
+    .groupBy(sql`1`)
+    .orderBy(sql`1 DESC`);
+
+  return rows.map((r) => ({
+    bucket: r.bucket,
+    salesCount: Number(r.salesCount),
+    salesTotal: r.salesTotal,
+    perMethod: {
+      efectivo: r.cash,
+      transferencia: r.transfer,
+      debito: r.debit,
+      credito1: r.credit1,
+      credito3: r.credit3,
+      credito6: r.credit6,
+    },
+  }));
+}
+
+export async function getMonthlySales(
+  start: Date,
+  end: Date,
+): Promise<AggregatePerMethodRow[]> {
+  return getSalesAggregate(start, end, 'day', 'YYYY-MM-DD');
+}
+
+export async function getAnnualSales(
+  start: Date,
+  end: Date,
+): Promise<AggregatePerMethodRow[]> {
+  return getSalesAggregate(start, end, 'month', 'YYYY-MM');
+}
+
 export async function getSaleForEdit(id: string): Promise<SaleForEdit | null> {
   const db = getDb();
   const heads = await db

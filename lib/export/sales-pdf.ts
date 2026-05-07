@@ -220,3 +220,188 @@ export function buildSalesDailyPdf(
 export function salesDailyPdfFilename(date: string): string {
   return `ventas-diaria-${date}.pdf`;
 }
+
+// -----------------------------------------------------------------------------
+// Monthly + annual aggregate PDFs.
+// -----------------------------------------------------------------------------
+
+import type { AggregatePerMethodRow } from '@/lib/queries/sales';
+
+const MONTHS_ES_PDF = [
+  'enero',
+  'febrero',
+  'marzo',
+  'abril',
+  'mayo',
+  'junio',
+  'julio',
+  'agosto',
+  'septiembre',
+  'octubre',
+  'noviembre',
+  'diciembre',
+];
+
+function buildSalesAggregatePdf(
+  title: string,
+  subtitle: string,
+  bucketHeader: string,
+  rows: AggregatePerMethodRow[],
+  formatBucket: (b: string) => string,
+): Uint8Array {
+  const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const marginX = 30;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(20);
+  doc.setTextColor(...ORANGE);
+  doc.text('Carestino Santa Fe', marginX, 50);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(...TEXT_DARK);
+  doc.text(title, marginX, 70);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(...TEXT_MUTED);
+  doc.text(subtitle, marginX, 86);
+
+  const generated = `Generado el ${formatLongDateInAppTZ(todayInAppTZ())}`;
+  const genWidth = doc.getTextWidth(generated);
+  doc.text(generated, pageWidth - marginX - genWidth, 86);
+
+  // Total card.
+  const totalSum = rows.reduce((acc, r) => acc + Number(r.salesTotal), 0);
+  const totalCount = rows.reduce((acc, r) => acc + r.salesCount, 0);
+
+  const cardY = 100;
+  const cardW = pageWidth - marginX * 2;
+  const cardH = 50;
+  doc.setFillColor(...ORANGE);
+  doc.roundedRect(marginX, cardY, cardW, cardH, 6, 6, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(255, 255, 255);
+  doc.text('TOTAL DEL PERÍODO', marginX + 12, cardY + 16);
+  doc.setFontSize(20);
+  doc.text(formatARS(totalSum.toFixed(2)), marginX + 12, cardY + 38);
+  const countText = `${totalCount} venta${totalCount === 1 ? '' : 's'}`;
+  const countW = doc.getTextWidth(countText);
+  doc.setFontSize(11);
+  doc.text(countText, pageWidth - marginX - 12 - countW, cardY + 38);
+
+  // Detail.
+  const head = [
+    [
+      bucketHeader,
+      'Cant.',
+      'Ventas total',
+      'Efectivo',
+      'Transferencia',
+      'Débito',
+      'Crédito 1c',
+      'Crédito 3c',
+      'Crédito 6c',
+    ],
+  ];
+  const body: string[][] = rows.map((r) => [
+    formatBucket(r.bucket),
+    String(r.salesCount),
+    formatARS(r.salesTotal),
+    formatARS(r.perMethod.efectivo),
+    formatARS(r.perMethod.transferencia),
+    formatARS(r.perMethod.debito),
+    formatARS(r.perMethod.credito1),
+    formatARS(r.perMethod.credito3),
+    formatARS(r.perMethod.credito6),
+  ]);
+
+  autoTable(doc, {
+    startY: cardY + cardH + 14,
+    margin: { left: marginX, right: marginX },
+    head,
+    body,
+    headStyles: {
+      fillColor: ORANGE,
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 8,
+      halign: 'left',
+    },
+    bodyStyles: { fontSize: 8, textColor: TEXT_DARK, cellPadding: 3 },
+    alternateRowStyles: { fillColor: ORANGE_LIGHT },
+    columnStyles: {
+      0: { cellWidth: 80 },
+      1: { halign: 'center', cellWidth: 40 },
+      2: { halign: 'right', cellWidth: 90 },
+      3: { halign: 'right', cellWidth: 80 },
+      4: { halign: 'right', cellWidth: 80 },
+      5: { halign: 'right', cellWidth: 80 },
+      6: { halign: 'right', cellWidth: 80 },
+      7: { halign: 'right', cellWidth: 80 },
+      8: { halign: 'right', cellWidth: 80 },
+    },
+    styles: { lineColor: BORDER, lineWidth: 0.5 },
+    didDrawPage: (data) => {
+      const pageCount = doc.getNumberOfPages();
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(...TEXT_MUTED);
+      const footer = `Página ${data.pageNumber} de ${pageCount}`;
+      const w = doc.getTextWidth(footer);
+      doc.text(footer, pageWidth - marginX - w, doc.internal.pageSize.getHeight() - 16);
+    },
+  });
+
+  if (body.length === 0) {
+    const finalY =
+      (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ??
+      cardY + cardH + 30;
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(10);
+    doc.setTextColor(...TEXT_MUTED);
+    doc.text('No hay ventas en este período.', marginX, finalY + 16);
+  }
+
+  return new Uint8Array(doc.output('arraybuffer'));
+}
+
+export function buildSalesMonthlyPdf(
+  month: string,
+  rows: AggregatePerMethodRow[],
+): Uint8Array {
+  return buildSalesAggregatePdf(
+    'Ventas — Planilla mensual',
+    `Mes: ${month}`,
+    'Día',
+    rows,
+    (b) => b,
+  );
+}
+
+export function buildSalesAnnualPdf(
+  year: number,
+  rows: AggregatePerMethodRow[],
+): Uint8Array {
+  return buildSalesAggregatePdf(
+    'Ventas — Planilla anual',
+    `Año: ${year}`,
+    'Mes',
+    rows,
+    (b) => {
+      const [, mm] = b.split('-');
+      const idx = Number(mm) - 1;
+      return `${MONTHS_ES_PDF[idx] ?? b} ${year}`;
+    },
+  );
+}
+
+export function salesMonthlyPdfFilename(month: string): string {
+  return `ventas-mensual-${month}.pdf`;
+}
+
+export function salesAnnualPdfFilename(year: number): string {
+  return `ventas-anual-${year}.pdf`;
+}
