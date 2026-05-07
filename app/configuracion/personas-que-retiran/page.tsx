@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { ArrowUp, EyeOff } from 'lucide-react';
 
 import {
   ForbiddenError,
@@ -8,10 +7,8 @@ import {
   requireRole,
 } from '@/lib/auth';
 import { listAllWithdrawalPersons } from '@/lib/queries/withdrawals';
-import { setWithdrawalPersonActive } from '@/app/actions/config';
 import { WithdrawalPersonForm } from '@/components/config/withdrawal-person-form';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { EditableNameRow } from '@/components/config/editable-name-row';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,15 +22,6 @@ export default async function WithdrawalPersonsConfigPage() {
   }
 
   const persons = await listAllWithdrawalPersons();
-
-  async function toggleActive(formData: FormData) {
-    'use server';
-    const id = Number(formData.get('id'));
-    const next = formData.get('next') === 'true';
-    if (Number.isInteger(id) && id > 0) {
-      await setWithdrawalPersonActive(id, next);
-    }
-  }
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
@@ -78,44 +66,13 @@ export default async function WithdrawalPersonsConfigPage() {
             </thead>
             <tbody>
               {persons.map((p) => (
-                <tr key={p.id} className="border-b border-border last:border-0">
-                  <td className="px-3 py-3 font-medium">{p.name}</td>
-                  <td className="px-3 py-3">
-                    <span
-                      className={cn(
-                        'inline-flex items-center rounded-full border px-2 py-0.5 text-xs',
-                        p.isActive
-                          ? 'border-success/30 bg-success/10 text-success'
-                          : 'border-border bg-muted text-muted-foreground',
-                      )}
-                    >
-                      {p.isActive ? 'Activa' : 'Inactiva'}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3 text-right">
-                    <form action={toggleActive} className="inline">
-                      <input type="hidden" name="id" value={p.id} />
-                      <input
-                        type="hidden"
-                        name="next"
-                        value={p.isActive ? 'false' : 'true'}
-                      />
-                      <Button type="submit" variant="outline" size="sm">
-                        {p.isActive ? (
-                          <>
-                            <EyeOff className="mr-1 h-3 w-3" />
-                            Desactivar
-                          </>
-                        ) : (
-                          <>
-                            <ArrowUp className="mr-1 h-3 w-3" />
-                            Activar
-                          </>
-                        )}
-                      </Button>
-                    </form>
-                  </td>
-                </tr>
+                <EditableNameRow
+                  key={p.id}
+                  id={p.id}
+                  name={p.name}
+                  isActive={p.isActive}
+                  variant="withdrawal-person"
+                />
               ))}
               {persons.length === 0 && (
                 <tr>

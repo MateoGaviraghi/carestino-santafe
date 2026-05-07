@@ -144,6 +144,56 @@ export async function setCardBrandActive(
   }
 }
 
+export async function renameCardBrand(
+  id: number,
+  name: string,
+): Promise<ConfigResult<void>> {
+  const gated = await gateAdmin();
+  if (gated) return gated;
+
+  if (!Number.isInteger(id) || id <= 0) {
+    return { ok: false, error: 'validation_error', message: 'id_invalido' };
+  }
+
+  let parsed: string;
+  try {
+    parsed = cardBrandNameSchema.parse(name);
+  } catch (e) {
+    if (e instanceof ZodError) {
+      return {
+        ok: false,
+        error: 'validation_error',
+        message: e.issues.map((i) => i.message).join('; '),
+      };
+    }
+    throw e;
+  }
+
+  const db = getDb();
+  try {
+    const updated = await db
+      .update(cardBrands)
+      .set({ name: parsed })
+      .where(eq(cardBrands.id, id))
+      .returning({ id: cardBrands.id });
+    if (updated.length === 0) {
+      return { ok: false, error: 'not_found' };
+    }
+    REVALIDATE_PATHS.forEach((p) => revalidatePath(p));
+    return { ok: true, data: undefined };
+  } catch (e) {
+    if (isUniqueViolation(e)) {
+      return {
+        ok: false,
+        error: 'already_exists',
+        message: `Ya existe una marca con el nombre "${parsed}".`,
+      };
+    }
+    console.error('renameCardBrand failed:', e);
+    return { ok: false, error: 'internal_error' };
+  }
+}
+
 // -----------------------------------------------------------------------------
 // Withdrawal persons (V1) — same shape as card brands.
 // -----------------------------------------------------------------------------
@@ -224,6 +274,56 @@ export async function setWithdrawalPersonActive(
     return { ok: true, data: undefined };
   } catch (e) {
     console.error('setWithdrawalPersonActive failed:', e);
+    return { ok: false, error: 'internal_error' };
+  }
+}
+
+export async function renameWithdrawalPerson(
+  id: number,
+  name: string,
+): Promise<ConfigResult<void>> {
+  const gated = await gateAdmin();
+  if (gated) return gated;
+
+  if (!Number.isInteger(id) || id <= 0) {
+    return { ok: false, error: 'validation_error', message: 'id_invalido' };
+  }
+
+  let parsed: string;
+  try {
+    parsed = cardBrandNameSchema.parse(name);
+  } catch (e) {
+    if (e instanceof ZodError) {
+      return {
+        ok: false,
+        error: 'validation_error',
+        message: e.issues.map((i) => i.message).join('; '),
+      };
+    }
+    throw e;
+  }
+
+  const db = getDb();
+  try {
+    const updated = await db
+      .update(withdrawalPersons)
+      .set({ name: parsed })
+      .where(eq(withdrawalPersons.id, id))
+      .returning({ id: withdrawalPersons.id });
+    if (updated.length === 0) {
+      return { ok: false, error: 'not_found' };
+    }
+    WITHDRAWAL_PERSON_REVALIDATE_PATHS.forEach((p) => revalidatePath(p));
+    return { ok: true, data: undefined };
+  } catch (e) {
+    if (isUniqueViolation(e)) {
+      return {
+        ok: false,
+        error: 'already_exists',
+        message: `Ya existe una persona con el nombre "${parsed}".`,
+      };
+    }
+    console.error('renameWithdrawalPerson failed:', e);
     return { ok: false, error: 'internal_error' };
   }
 }
