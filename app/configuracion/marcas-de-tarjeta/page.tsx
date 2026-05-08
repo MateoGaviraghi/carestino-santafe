@@ -24,7 +24,7 @@ export default async function CardBrandsConfigPage() {
   const brands = await listAllCardBrands();
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
+    <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-10">
       <header className="mb-8">
         <Link
           href="/"
@@ -47,8 +47,7 @@ export default async function CardBrandsConfigPage() {
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Marcas existentes
         </h2>
-        <div className="overflow-hidden rounded-card border border-border">
-          <table className="w-full text-sm">
+        <div className="-mx-4 overflow-x-auto rounded-none border-y border-border sm:mx-0 sm:rounded-card sm:border"><table className="w-full min-w-[520px] text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50 text-left">
                 <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">

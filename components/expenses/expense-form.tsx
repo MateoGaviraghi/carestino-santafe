@@ -319,7 +319,7 @@ export function ExpenseForm(props: Props) {
         <textarea
           id="observations"
           rows={2}
-          className="w-full rounded-input border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="w-full rounded-input border border-input bg-background px-3 py-2 text-base sm:text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           {...register('observations')}
         />
       </div>

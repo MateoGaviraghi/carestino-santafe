@@ -31,8 +31,8 @@ export function ExpensesTable({ rows }: Props) {
   if (rows.length === 0) return null;
 
   return (
-    <div className="overflow-x-auto rounded-card border border-border">
-      <table className="w-full text-sm">
+    <div className="-mx-4 overflow-x-auto rounded-none border-y border-border sm:mx-0 sm:rounded-card sm:border">
+      <table className="w-full min-w-[680px] text-sm">
         <thead>
           <tr className="border-b border-border bg-muted/50 text-left">
             <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">

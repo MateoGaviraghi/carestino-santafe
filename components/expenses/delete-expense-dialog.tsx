@@ -86,7 +86,7 @@ export function DeleteExpenseDialog({
           onClick={onClose}
           disabled={isPending}
           aria-label="Cerrar"
-          className="absolute right-4 top-4 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="absolute right-3 top-3 rounded-input p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           <X className="h-4 w-4" />
         </button>

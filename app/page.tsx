@@ -67,7 +67,7 @@ export default async function HomePage() {
   return (
     <main className="min-h-screen bg-background">
       <header className="border-b border-border bg-card/60 backdrop-blur supports-[backdrop-filter]:bg-card/50">
-        <div className="mx-auto flex max-w-[1400px] items-center justify-between px-8 py-5">
+        <div className="mx-auto flex max-w-[1400px] items-center justify-between px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
           <div className="flex items-center gap-4">
             <Image
               src="/logo-nombre.png"
@@ -89,16 +89,16 @@ export default async function HomePage() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-[1400px] space-y-12 px-8 py-12">
+      <div className="mx-auto max-w-[1400px] space-y-8 px-4 py-8 sm:space-y-10 sm:px-6 sm:py-10 lg:space-y-12 lg:px-8 lg:py-12">
         <section>
           <p className="flex items-center gap-2 text-sm uppercase tracking-wide text-muted-foreground">
             <CalendarDays className="h-4 w-4" />
             <span className="capitalize">{todayLabel}</span>
           </p>
-          <h1 className="mt-3 text-4xl font-semibold tracking-tight text-foreground">
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground sm:mt-3 sm:text-3xl lg:text-4xl">
             Resumen del día
           </h1>
-          <p className="mt-2 text-base text-muted-foreground">
+          <p className="mt-1.5 text-sm text-muted-foreground sm:mt-2 sm:text-base">
             Caja, ventas y retiros de hoy en tiempo real.
           </p>
         </section>
@@ -313,7 +313,7 @@ function KPI({
         : 'text-foreground';
   return (
     <div
-      className={`rounded-card border border-border bg-card p-7 ${
+      className={`rounded-card border border-border bg-card p-5 sm:p-6 lg:p-7 ${
         highlight ? 'shadow-sm ring-1 ring-primary/10' : ''
       }`}
     >
@@ -324,12 +324,12 @@ function KPI({
         <span className="text-muted-foreground">{icon}</span>
       </div>
       <div
-        className={`mt-4 text-4xl font-semibold tabular-nums tracking-tight ${valueClasses}`}
+        className={`mt-3 break-words text-2xl font-semibold tabular-nums tracking-tight sm:mt-4 sm:text-3xl lg:text-4xl ${valueClasses}`}
       >
         {value}
       </div>
       {sublabel && (
-        <div className="mt-2 text-sm text-muted-foreground">{sublabel}</div>
+        <div className="mt-1.5 text-xs text-muted-foreground sm:mt-2 sm:text-sm">{sublabel}</div>
       )}
     </div>
   );
@@ -350,7 +350,7 @@ function QuickAction({
   return (
     <Link
       href={href}
-      className={`group flex items-center justify-between rounded-card border px-6 py-5 transition ${
+      className={`group flex items-center justify-between rounded-card border px-4 py-4 transition sm:px-5 sm:py-4 lg:px-6 lg:py-5 ${
         isPrimary
           ? 'border-primary/30 bg-primary text-primary-foreground hover:opacity-95'
           : 'border-border bg-card hover:border-primary/30 hover:bg-muted/40'
@@ -398,7 +398,7 @@ function NavCard({
   empty?: string;
 }) {
   return (
-    <div className="rounded-card border border-border bg-card p-7">
+    <div className="rounded-card border border-border bg-card p-5 sm:p-6 lg:p-7">
       <div className="flex items-center gap-3">
         <span className="flex h-11 w-11 items-center justify-center rounded-input bg-muted text-foreground">
           {icon}
@@ -441,7 +441,7 @@ function ConfigLink({
   return (
     <Link
       href={href}
-      className="group flex items-center gap-3.5 rounded-card border border-border bg-card px-5 py-4 transition hover:border-primary/30 hover:bg-muted/40"
+      className="group flex items-center gap-3 rounded-card border border-border bg-card px-4 py-3.5 transition hover:border-primary/30 hover:bg-muted/40 sm:gap-3.5 sm:px-5 sm:py-4"
     >
       <span className="text-muted-foreground transition group-hover:text-foreground">
         {icon}

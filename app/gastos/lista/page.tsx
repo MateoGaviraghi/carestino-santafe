@@ -1,4 +1,4 @@
-import Link from 'next/link';
+﻿import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import {
@@ -53,7 +53,7 @@ export default async function ExpensesListPage({
   const exportPdf = `/api/export/expenses?${pdfParams.toString()}`;
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
+    <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
       <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <Link
@@ -65,22 +65,22 @@ export default async function ExpensesListPage({
           <h1 className="mt-2 text-2xl font-semibold tracking-tight">Gastos</h1>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
           <a
             href={exportXlsx}
-            className="inline-flex h-9 items-center rounded-input border border-border bg-background px-3 text-xs font-medium hover:bg-muted"
+            className="inline-flex h-10 items-center justify-center rounded-input border border-border bg-background px-3 text-sm font-medium hover:bg-muted sm:h-9 sm:text-xs"
           >
             Excel
           </a>
           <a
             href={exportPdf}
-            className="inline-flex h-9 items-center rounded-input border border-border bg-background px-3 text-xs font-medium hover:bg-muted"
+            className="inline-flex h-10 items-center justify-center rounded-input border border-border bg-background px-3 text-sm font-medium hover:bg-muted sm:h-9 sm:text-xs"
           >
             PDF
           </a>
           <Link
             href="/gastos/nuevo"
-            className="inline-flex h-9 items-center rounded-input bg-primary px-3 text-xs font-medium text-primary-foreground hover:opacity-90"
+            className="col-span-2 inline-flex h-11 items-center justify-center rounded-input bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90 sm:col-span-1 sm:h-9 sm:px-3 sm:text-xs"
           >
             + Nuevo gasto
           </Link>

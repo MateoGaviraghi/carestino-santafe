@@ -50,7 +50,7 @@ export function SuccessToast({
       onClick={onClose}
     >
       <div
-        className="animate-success-in mx-6 max-w-sm rounded-card bg-success px-12 py-10 text-center text-success-foreground shadow-2xl"
+        className="animate-success-in mx-4 w-full max-w-sm rounded-card bg-success px-8 py-8 text-center text-success-foreground shadow-2xl sm:mx-6 sm:px-12 sm:py-10"
         onClick={(e) => e.stopPropagation()}
       >
         <CheckCircle2 className="mx-auto h-20 w-20" strokeWidth={2} aria-hidden />

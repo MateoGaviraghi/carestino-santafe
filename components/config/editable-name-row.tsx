@@ -119,7 +119,6 @@ export function EditableNameRow({ id, name, isActive, variant }: Props) {
                 }
               }}
               disabled={isPending}
-              className="h-8"
             />
           </div>
         ) : (

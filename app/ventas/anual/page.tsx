@@ -59,7 +59,7 @@ export default async function AnnualSalesPage({
   const yearCount = rows.reduce((acc, r) => acc + r.salesCount, 0);
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
+    <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
       <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <Link
@@ -71,32 +71,32 @@ export default async function AnnualSalesPage({
           <h1 className="mt-2 text-2xl font-semibold tracking-tight">Ventas — Anual</h1>
           <p className="mt-1 text-sm text-muted-foreground">{year}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <form method="get" className="flex items-center gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+          <form method="get" className="col-span-2 flex items-center gap-2 sm:col-span-1">
             <input
               type="number"
               name="year"
               min="2020"
               max="2100"
               defaultValue={year}
-              className="h-9 w-24 rounded-input border border-input bg-background px-2 text-sm tabular-nums"
+              className="h-11 w-28 rounded-input border border-input bg-background px-3 text-base tabular-nums sm:h-9 sm:w-24 sm:text-sm"
             />
             <button
               type="submit"
-              className="h-9 rounded-input bg-muted px-3 text-xs font-medium hover:bg-muted/80"
+              className="h-11 rounded-input bg-muted px-4 text-sm font-medium hover:bg-muted/80 sm:h-9 sm:px-3 sm:text-xs"
             >
               Ver
             </button>
           </form>
           <a
             href={`/api/export/sales?period=annual&year=${year}&format=xlsx`}
-            className="inline-flex h-9 items-center rounded-input border border-border bg-background px-3 text-xs font-medium hover:bg-muted"
+            className="inline-flex h-10 items-center justify-center rounded-input border border-border bg-background px-3 text-sm font-medium hover:bg-muted sm:h-9 sm:text-xs"
           >
             Excel
           </a>
           <a
             href={`/api/export/sales?period=annual&year=${year}&format=pdf`}
-            className="inline-flex h-9 items-center rounded-input border border-border bg-background px-3 text-xs font-medium hover:bg-muted"
+            className="inline-flex h-10 items-center justify-center rounded-input border border-border bg-background px-3 text-sm font-medium hover:bg-muted sm:h-9 sm:text-xs"
           >
             PDF
           </a>
@@ -107,7 +107,7 @@ export default async function AnnualSalesPage({
         <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           Total del año
         </div>
-        <div className="mt-1 text-3xl font-semibold tabular-nums text-primary">
+        <div className="mt-1 text-2xl font-semibold tabular-nums text-primary sm:text-3xl">
           {formatARS(yearTotal.toFixed(2))}
         </div>
         <div className="mt-1 text-xs text-muted-foreground">

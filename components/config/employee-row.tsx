@@ -91,7 +91,6 @@ export function EmployeeRow({ user, isSelf }: Props) {
             value={user.role}
             onChange={(e) => onRoleChange(e.target.value as Role)}
             disabled={isPending}
-            className="h-8"
           >
             <option value="cajero">Cajero</option>
             <option value="super_admin">Super admin</option>

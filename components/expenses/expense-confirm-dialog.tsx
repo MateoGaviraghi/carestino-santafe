@@ -56,7 +56,7 @@ export function ExpenseConfirmDialog({
       onClick={isPending ? undefined : onCancel}
     >
       <div
-        className="animate-success-in mx-6 w-full max-w-md rounded-card border border-border bg-card p-6 shadow-2xl"
+        className="animate-success-in mx-4 w-full max-w-md rounded-card border border-border bg-card p-5 shadow-2xl sm:mx-6 sm:p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="mb-5 text-center">

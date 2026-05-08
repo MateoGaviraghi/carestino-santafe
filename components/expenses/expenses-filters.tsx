@@ -239,7 +239,7 @@ function ToggleChip({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        'rounded-full border px-2.5 py-1 text-xs transition',
+        'rounded-full border px-3 py-1.5 text-xs sm:py-1 transition min-h-[32px] sm:min-h-0',
         active
           ? 'border-primary/50 bg-primary/10 text-primary'
           : 'border-border bg-background text-foreground hover:bg-muted',

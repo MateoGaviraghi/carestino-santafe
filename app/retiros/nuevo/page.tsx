@@ -1,4 +1,4 @@
-import { redirect } from 'next/navigation';
+﻿import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import {
   ForbiddenError,
@@ -23,7 +23,7 @@ export default async function NewWithdrawalPage() {
   const persons = await listActiveWithdrawalPersons();
 
   return (
-    <main className="mx-auto max-w-xl px-6 py-10">
+    <main className="mx-auto max-w-xl px-4 py-8 sm:px-6 sm:py-10">
       <header className="mb-8">
         <Link
           href="/"

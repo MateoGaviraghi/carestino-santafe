@@ -67,7 +67,7 @@ export default async function MonthlySalesPage({
   const monthLabel = `${MONTHS_ES[m - 1]} ${y}`;
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
+    <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
       <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <Link
@@ -79,30 +79,30 @@ export default async function MonthlySalesPage({
           <h1 className="mt-2 text-2xl font-semibold tracking-tight">Ventas — Mensual</h1>
           <p className="mt-1 text-sm capitalize text-muted-foreground">{monthLabel}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <form method="get" className="flex items-center gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+          <form method="get" className="col-span-2 flex items-center gap-2 sm:col-span-1">
             <input
               type="month"
               name="month"
               defaultValue={month}
-              className="h-9 rounded-input border border-input bg-background px-2 text-sm tabular-nums"
+              className="h-11 flex-1 rounded-input border border-input bg-background px-3 text-base tabular-nums sm:h-9 sm:flex-none sm:text-sm"
             />
             <button
               type="submit"
-              className="h-9 rounded-input bg-muted px-3 text-xs font-medium hover:bg-muted/80"
+              className="h-11 rounded-input bg-muted px-4 text-sm font-medium hover:bg-muted/80 sm:h-9 sm:px-3 sm:text-xs"
             >
               Ver
             </button>
           </form>
           <a
             href={`/api/export/sales?period=monthly&month=${month}&format=xlsx`}
-            className="inline-flex h-9 items-center rounded-input border border-border bg-background px-3 text-xs font-medium hover:bg-muted"
+            className="inline-flex h-10 items-center justify-center rounded-input border border-border bg-background px-3 text-sm font-medium hover:bg-muted sm:h-9 sm:text-xs"
           >
             Excel
           </a>
           <a
             href={`/api/export/sales?period=monthly&month=${month}&format=pdf`}
-            className="inline-flex h-9 items-center rounded-input border border-border bg-background px-3 text-xs font-medium hover:bg-muted"
+            className="inline-flex h-10 items-center justify-center rounded-input border border-border bg-background px-3 text-sm font-medium hover:bg-muted sm:h-9 sm:text-xs"
           >
             PDF
           </a>
@@ -113,7 +113,7 @@ export default async function MonthlySalesPage({
         <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           Total del mes
         </div>
-        <div className="mt-1 text-3xl font-semibold tabular-nums text-primary">
+        <div className="mt-1 text-2xl font-semibold tabular-nums text-primary sm:text-3xl">
           {formatARS(monthTotal.toFixed(2))}
         </div>
         <div className="mt-1 text-xs text-muted-foreground">

@@ -42,7 +42,7 @@ export default async function EditWithdrawalPage({ params }: { params: Params })
   };
 
   return (
-    <main className="mx-auto max-w-xl px-6 py-10">
+    <main className="mx-auto max-w-xl px-4 py-8 sm:px-6 sm:py-10">
       <header className="mb-8">
         <Link
           href="/retiros/diaria"
