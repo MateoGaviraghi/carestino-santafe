@@ -1,211 +1,481 @@
+import type { ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/nextjs';
+import { SignInButton, UserButton } from '@clerk/nextjs';
 import { auth } from '@clerk/nextjs/server';
+import Decimal from 'decimal.js';
+import { formatInTimeZone } from 'date-fns-tz';
+import { es } from 'date-fns/locale';
+import {
+  ArrowRight,
+  Banknote,
+  CalendarDays,
+  CreditCard,
+  Plus,
+  Receipt,
+  ShoppingBag,
+  TrendingUp,
+  UserCog,
+  Users,
+  Wallet,
+} from 'lucide-react';
 
-type SessionPublicMetadata = { role?: string };
+import { APP_TZ, dayRangeInAppTZ, todayInAppTZ } from '@/lib/dates';
+import { formatARS } from '@/lib/money';
+import { getDailySalesTotals } from '@/lib/queries/sales';
+import { getDailyWithdrawalsTotals } from '@/lib/queries/withdrawals';
+import { listExpenses } from '@/lib/queries/expenses';
+
+export const dynamic = 'force-dynamic';
+
+type Role = 'super_admin' | 'cajero';
+type SessionPublicMetadata = { role?: Role };
 
 export default async function HomePage() {
   const { userId, sessionClaims } = await auth();
+
+  if (!userId) {
+    return <SignedOutHome />;
+  }
+
   const metadata = (sessionClaims?.publicMetadata ?? {}) as SessionPublicMetadata;
   const role = metadata.role ?? null;
-  const roleOk = role === 'super_admin';
+  const isAdmin = role === 'super_admin';
+
+  const today = todayInAppTZ();
+  const { start, end } = dayRangeInAppTZ(today);
+
+  const [salesTotals, withdrawalsTotals, expensesData] = await Promise.all([
+    getDailySalesTotals(start, end),
+    getDailyWithdrawalsTotals(start, end),
+    isAdmin ? listExpenses({ from: today, to: today }) : Promise.resolve(null),
+  ]);
+
+  const ventas = new Decimal(salesTotals.salesTotal);
+  const retiros = new Decimal(withdrawalsTotals.withdrawalsTotal);
+  const gastos = expensesData ? new Decimal(expensesData.total) : new Decimal(0);
+  const cajaNeta = ventas.minus(retiros).minus(gastos);
+  const cajaCajero = ventas.minus(retiros);
+
+  const todayLabel = formatInTimeZone(
+    new Date(),
+    APP_TZ,
+    "EEEE, d 'de' MMMM",
+    { locale: es },
+  );
 
   return (
-    <main className="relative min-h-screen bg-background">
-      {/* User avatar — only when signed in, anchored top-right for sign-out access */}
-      <SignedIn>
-        <div className="absolute right-6 top-6">
-          <UserButton />
+    <main className="min-h-screen bg-background">
+      <header className="border-b border-border bg-card/60 backdrop-blur supports-[backdrop-filter]:bg-card/50">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+          <div className="flex items-center gap-3">
+            <Image
+              src="/logo-nombre.png"
+              alt="Carestino"
+              width={140}
+              height={36}
+              priority
+              className="h-8 w-auto"
+            />
+            <span className="hidden h-5 w-px bg-border md:block" />
+            <span className="hidden text-sm font-medium text-muted-foreground md:inline">
+              Santa Fe
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <RoleChip role={role} />
+            <UserButton />
+          </div>
         </div>
-      </SignedIn>
+      </header>
 
+      <div className="mx-auto max-w-6xl space-y-10 px-6 py-10">
+        <section>
+          <p className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
+            <CalendarDays className="h-3.5 w-3.5" />
+            <span className="capitalize">{todayLabel}</span>
+          </p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
+            Resumen del día
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Caja, ventas y retiros de hoy en tiempo real.
+          </p>
+        </section>
+
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <KPI
+            label="Ventas hoy"
+            value={formatARS(salesTotals.salesTotal)}
+            sublabel={`${salesTotals.salesCount} ${salesTotals.salesCount === 1 ? 'venta' : 'ventas'}`}
+            icon={<Receipt className="h-4 w-4" />}
+          />
+          <KPI
+            label="Retiros hoy"
+            value={formatARS(withdrawalsTotals.withdrawalsTotal)}
+            sublabel={`${withdrawalsTotals.withdrawalsCount} ${withdrawalsTotals.withdrawalsCount === 1 ? 'retiro' : 'retiros'}`}
+            icon={<Wallet className="h-4 w-4" />}
+          />
+          {isAdmin && expensesData && (
+            <KPI
+              label="Gastos hoy"
+              value={formatARS(expensesData.total)}
+              sublabel={`${expensesData.count} ${expensesData.count === 1 ? 'gasto' : 'gastos'}`}
+              icon={<ShoppingBag className="h-4 w-4" />}
+            />
+          )}
+          {isAdmin ? (
+            <KPI
+              label="Caja del día"
+              value={formatARS(cajaNeta.toFixed(2))}
+              sublabel={
+                cajaNeta.gte(0)
+                  ? 'Ventas − retiros − gastos'
+                  : 'Neto negativo · revisar movimientos'
+              }
+              icon={<Banknote className="h-4 w-4" />}
+              tone={cajaNeta.gte(0) ? 'success' : 'destructive'}
+              highlight
+            />
+          ) : (
+            <KPI
+              label="Caja del día"
+              value={formatARS(cajaCajero.toFixed(2))}
+              sublabel="Ventas − retiros"
+              icon={<TrendingUp className="h-4 w-4" />}
+              tone={cajaCajero.gte(0) ? 'success' : 'destructive'}
+              highlight
+            />
+          )}
+        </section>
+
+        <section>
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Acciones rápidas
+          </h2>
+          <div
+            className={`grid gap-3 ${isAdmin ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}
+          >
+            <QuickAction
+              href="/ventas/nueva"
+              label="Nueva venta"
+              hint="Registrar una venta del mostrador"
+              variant="primary"
+            />
+            <QuickAction
+              href="/retiros/nuevo"
+              label="Nuevo retiro"
+              hint="Sacar plata de la caja"
+            />
+            {isAdmin && (
+              <QuickAction
+                href="/gastos/nuevo"
+                label="Nuevo gasto"
+                hint="Pagar un proveedor o servicio"
+              />
+            )}
+          </div>
+        </section>
+
+        <section>
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Operación
+          </h2>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <NavCard
+              icon={<Receipt className="h-5 w-5" />}
+              title="Ventas"
+              description={
+                isAdmin
+                  ? 'Planilla diaria, mensual y anual con drill-down.'
+                  : 'Planilla del día con todos los movimientos.'
+              }
+              links={
+                isAdmin
+                  ? [
+                      { href: '/ventas/diaria', label: 'Diaria' },
+                      { href: '/ventas/mensual', label: 'Mensual' },
+                      { href: '/ventas/anual', label: 'Anual' },
+                    ]
+                  : [{ href: '/ventas/diaria', label: 'Diaria' }]
+              }
+            />
+            <NavCard
+              icon={<Wallet className="h-5 w-5" />}
+              title="Retiros"
+              description={
+                isAdmin
+                  ? 'Movimientos por día, mes y año.'
+                  : 'Sólo carga de retiros nuevos.'
+              }
+              links={
+                isAdmin
+                  ? [
+                      { href: '/retiros/diaria', label: 'Diaria' },
+                      { href: '/retiros/mensual', label: 'Mensual' },
+                      { href: '/retiros/anual', label: 'Anual' },
+                    ]
+                  : []
+              }
+              empty={!isAdmin ? 'Usá "Nuevo retiro" arriba.' : undefined}
+            />
+            {isAdmin && (
+              <NavCard
+                icon={<ShoppingBag className="h-5 w-5" />}
+                title="Gastos"
+                description="Listado filtrable de proveedores y pagos."
+                links={[{ href: '/gastos/lista', label: 'Listado' }]}
+              />
+            )}
+          </div>
+        </section>
+
+        {isAdmin && (
+          <section>
+            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Configuración
+            </h2>
+            <div className="grid gap-3 md:grid-cols-3">
+              <ConfigLink
+                href="/configuracion/marcas-de-tarjeta"
+                icon={<CreditCard className="h-4 w-4" />}
+                label="Marcas de tarjeta"
+              />
+              <ConfigLink
+                href="/configuracion/personas-que-retiran"
+                icon={<Users className="h-4 w-4" />}
+                label="Personas que retiran"
+              />
+              <ConfigLink
+                href="/configuracion/empleados"
+                icon={<UserCog className="h-4 w-4" />}
+                label="Empleados"
+              />
+            </div>
+          </section>
+        )}
+
+        {!role && (
+          <section className="rounded-card border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+            Tu sesión no tiene rol asignado. Pediles a un super_admin que setee
+            <code className="mx-1 rounded bg-destructive/10 px-1.5 py-0.5 font-mono text-xs">
+              publicMetadata.role
+            </code>
+            en tu usuario de Clerk.
+          </section>
+        )}
+      </div>
+    </main>
+  );
+}
+
+function RoleChip({ role }: { role: Role | null }) {
+  const label =
+    role === 'super_admin'
+      ? 'Super admin'
+      : role === 'cajero'
+        ? 'Cajero'
+        : 'Sin rol';
+  const tone = role
+    ? 'border-border bg-muted text-muted-foreground'
+    : 'border-destructive/30 bg-destructive/10 text-destructive';
+  return (
+    <span
+      className={`hidden items-center rounded-full border px-3 py-1 text-xs font-medium sm:inline-flex ${tone}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+type KpiTone = 'default' | 'success' | 'destructive';
+
+function KPI({
+  label,
+  value,
+  sublabel,
+  icon,
+  tone = 'default',
+  highlight = false,
+}: {
+  label: string;
+  value: string;
+  sublabel: string;
+  icon: ReactNode;
+  tone?: KpiTone;
+  highlight?: boolean;
+}) {
+  const valueClasses =
+    tone === 'success'
+      ? 'text-success'
+      : tone === 'destructive'
+        ? 'text-destructive'
+        : 'text-foreground';
+  return (
+    <div
+      className={`rounded-card border border-border bg-card p-5 ${
+        highlight ? 'shadow-sm ring-1 ring-primary/10' : ''
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {label}
+        </span>
+        <span className="text-muted-foreground">{icon}</span>
+      </div>
+      <div
+        className={`mt-3 text-2xl font-semibold tabular-nums tracking-tight ${valueClasses}`}
+      >
+        {value}
+      </div>
+      {sublabel && (
+        <div className="mt-1 text-xs text-muted-foreground">{sublabel}</div>
+      )}
+    </div>
+  );
+}
+
+function QuickAction({
+  href,
+  label,
+  hint,
+  variant = 'default',
+}: {
+  href: string;
+  label: string;
+  hint: string;
+  variant?: 'default' | 'primary';
+}) {
+  const isPrimary = variant === 'primary';
+  return (
+    <Link
+      href={href}
+      className={`group flex items-center justify-between rounded-card border px-4 py-3.5 transition ${
+        isPrimary
+          ? 'border-primary/30 bg-primary text-primary-foreground hover:opacity-95'
+          : 'border-border bg-card hover:border-primary/30 hover:bg-muted/40'
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        <span
+          className={`flex h-8 w-8 items-center justify-center rounded-input ${
+            isPrimary ? 'bg-primary-foreground/15' : 'bg-primary/10 text-primary'
+          }`}
+        >
+          <Plus className="h-4 w-4" />
+        </span>
+        <div className="leading-tight">
+          <div className="text-sm font-medium">{label}</div>
+          <div
+            className={`text-xs ${
+              isPrimary ? 'text-primary-foreground/80' : 'text-muted-foreground'
+            }`}
+          >
+            {hint}
+          </div>
+        </div>
+      </div>
+      <ArrowRight
+        className={`h-4 w-4 transition group-hover:translate-x-0.5 ${
+          isPrimary ? 'text-primary-foreground' : 'text-muted-foreground'
+        }`}
+      />
+    </Link>
+  );
+}
+
+function NavCard({
+  icon,
+  title,
+  description,
+  links,
+  empty,
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  links: { href: string; label: string }[];
+  empty?: string;
+}) {
+  return (
+    <div className="rounded-card border border-border bg-card p-5">
+      <div className="flex items-center gap-2.5">
+        <span className="flex h-9 w-9 items-center justify-center rounded-input bg-muted text-foreground">
+          {icon}
+        </span>
+        <h3 className="text-base font-semibold tracking-tight">{title}</h3>
+      </div>
+      <p className="mt-2.5 text-xs leading-relaxed text-muted-foreground">
+        {description}
+      </p>
+      {links.length > 0 ? (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {links.map((l) => (
+            <Link
+              key={l.href}
+              href={l.href}
+              className="inline-flex items-center rounded-input border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted"
+            >
+              {l.label}
+            </Link>
+          ))}
+        </div>
+      ) : empty ? (
+        <p className="mt-4 text-[11px] uppercase tracking-wide text-muted-foreground">
+          {empty}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function ConfigLink({
+  href,
+  icon,
+  label,
+}: {
+  href: string;
+  icon: ReactNode;
+  label: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group flex items-center gap-3 rounded-card border border-border bg-card px-4 py-3 transition hover:border-primary/30 hover:bg-muted/40"
+    >
+      <span className="text-muted-foreground transition group-hover:text-foreground">
+        {icon}
+      </span>
+      <span className="text-sm font-medium">{label}</span>
+      <ArrowRight className="ml-auto h-4 w-4 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-foreground" />
+    </Link>
+  );
+}
+
+function SignedOutHome() {
+  return (
+    <main className="min-h-screen bg-background">
       <div className="flex min-h-screen flex-col items-center justify-center px-6 py-12">
-        <div className="flex w-full max-w-sm flex-col items-center text-center">
+        <div className="flex w-full max-w-md flex-col items-center text-center">
           <Image
             src="/logo-nombre.png"
             alt="Carestino"
             width={400}
             height={100}
             priority
-            className="h-20 w-auto"
+            className="h-16 w-auto"
           />
-
           <h1 className="mt-8 text-2xl font-semibold tracking-tight text-foreground">
             Santa Fe — Sistema interno
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Gestión de ventas, retiros y gastos.
+            Iniciá sesión para gestionar ventas, retiros y gastos.
           </p>
-
-          <SignedOut>
-            <SignInButton mode="modal">
-              <button className="mt-8 rounded-input bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
-                Iniciar sesión
-              </button>
-            </SignInButton>
-          </SignedOut>
-
-          <SignedIn>
-            <div className="mt-8 w-full rounded-card border border-border bg-card p-5 text-left">
-              <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Sesión activa
-              </div>
-              <dl className="space-y-2 text-sm tabular-nums">
-                <div className="flex justify-between gap-4">
-                  <dt className="text-muted-foreground">userId</dt>
-                  <dd className="truncate font-mono text-xs">{userId}</dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="text-muted-foreground">role</dt>
-                  <dd>
-                    <span
-                      className={
-                        roleOk
-                          ? 'rounded-input bg-success px-2 py-0.5 text-xs font-medium text-success-foreground'
-                          : 'rounded-input bg-destructive px-2 py-0.5 text-xs font-medium text-destructive-foreground'
-                      }
-                    >
-                      {role ?? 'sin rol'}
-                    </span>
-                  </dd>
-                </div>
-              </dl>
-              <p className="mt-3 text-xs text-muted-foreground">
-                {roleOk
-                  ? 'JWT custom claim configurado correctamente.'
-                  : 'Falta setear publicMetadata.role = "super_admin" en Clerk.'}
-              </p>
-            </div>
-
-            <div className="mt-8 space-y-4 text-left">
-              {/* Sales section */}
-              <div>
-                <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Ventas
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Link
-                    href="/ventas/nueva"
-                    className="inline-flex items-center rounded-input bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
-                  >
-                    + Nueva venta
-                  </Link>
-                  <Link
-                    href="/ventas/diaria"
-                    className="inline-flex items-center rounded-input border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted"
-                  >
-                    Planilla diaria
-                  </Link>
-                  {roleOk && (
-                    <>
-                      <Link
-                        href="/ventas/mensual"
-                        className="inline-flex items-center rounded-input border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted"
-                      >
-                        Mensual
-                      </Link>
-                      <Link
-                        href="/ventas/anual"
-                        className="inline-flex items-center rounded-input border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted"
-                      >
-                        Anual
-                      </Link>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Withdrawals section */}
-              <div>
-                <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Retiros
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Link
-                    href="/retiros/nuevo"
-                    className="inline-flex items-center rounded-input bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
-                  >
-                    + Nuevo retiro
-                  </Link>
-                  {roleOk && (
-                    <>
-                      <Link
-                        href="/retiros/diaria"
-                        className="inline-flex items-center rounded-input border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted"
-                      >
-                        Diaria
-                      </Link>
-                      <Link
-                        href="/retiros/mensual"
-                        className="inline-flex items-center rounded-input border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted"
-                      >
-                        Mensual
-                      </Link>
-                      <Link
-                        href="/retiros/anual"
-                        className="inline-flex items-center rounded-input border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted"
-                      >
-                        Anual
-                      </Link>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Expenses — admin only */}
-              {roleOk && (
-                <div>
-                  <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Gastos
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Link
-                      href="/gastos/nuevo"
-                      className="inline-flex items-center rounded-input bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
-                    >
-                      + Nuevo gasto
-                    </Link>
-                    <Link
-                      href="/gastos/lista"
-                      className="inline-flex items-center rounded-input border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted"
-                    >
-                      Listado
-                    </Link>
-                  </div>
-                </div>
-              )}
-
-              {/* Configuration links — admin only */}
-              {roleOk && (
-                <div>
-                  <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Configuración
-                  </div>
-                  <div className="flex flex-wrap gap-3 text-xs">
-                    <Link
-                      href="/configuracion/marcas-de-tarjeta"
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      Marcas de tarjeta
-                    </Link>
-                    <Link
-                      href="/configuracion/personas-que-retiran"
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      Personas que retiran
-                    </Link>
-                    <Link
-                      href="/configuracion/empleados"
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      Empleados
-                    </Link>
-                  </div>
-                </div>
-              )}
-            </div>
-          </SignedIn>
+          <SignInButton mode="modal">
+            <button className="mt-8 inline-flex items-center rounded-input bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
+              Iniciar sesión
+            </button>
+          </SignInButton>
         </div>
       </div>
     </main>
