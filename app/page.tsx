@@ -67,15 +67,15 @@ export default async function HomePage() {
   return (
     <main className="min-h-screen bg-background">
       <header className="border-b border-border bg-card/60 backdrop-blur supports-[backdrop-filter]:bg-card/50">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
+        <div className="mx-auto flex max-w-[1400px] items-center justify-between px-8 py-5">
+          <div className="flex items-center gap-4">
             <Image
               src="/logo-nombre.png"
               alt="Carestino"
-              width={140}
-              height={36}
+              width={160}
+              height={40}
               priority
-              className="h-8 w-auto"
+              className="h-9 w-auto"
             />
             <span className="hidden h-5 w-px bg-border md:block" />
             <span className="hidden text-sm font-medium text-muted-foreground md:inline">
@@ -89,39 +89,39 @@ export default async function HomePage() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-6xl space-y-10 px-6 py-10">
+      <div className="mx-auto max-w-[1400px] space-y-12 px-8 py-12">
         <section>
-          <p className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
-            <CalendarDays className="h-3.5 w-3.5" />
+          <p className="flex items-center gap-2 text-sm uppercase tracking-wide text-muted-foreground">
+            <CalendarDays className="h-4 w-4" />
             <span className="capitalize">{todayLabel}</span>
           </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
+          <h1 className="mt-3 text-4xl font-semibold tracking-tight text-foreground">
             Resumen del día
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-2 text-base text-muted-foreground">
             Caja, ventas y retiros de hoy en tiempo real.
           </p>
         </section>
 
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           <KPI
             label="Ventas hoy"
             value={formatARS(salesTotals.salesTotal)}
             sublabel={`${salesTotals.salesCount} ${salesTotals.salesCount === 1 ? 'venta' : 'ventas'}`}
-            icon={<Receipt className="h-4 w-4" />}
+            icon={<Receipt className="h-5 w-5" />}
           />
           <KPI
             label="Retiros hoy"
             value={formatARS(withdrawalsTotals.withdrawalsTotal)}
             sublabel={`${withdrawalsTotals.withdrawalsCount} ${withdrawalsTotals.withdrawalsCount === 1 ? 'retiro' : 'retiros'}`}
-            icon={<Wallet className="h-4 w-4" />}
+            icon={<Wallet className="h-5 w-5" />}
           />
           {isAdmin && expensesData && (
             <KPI
               label="Gastos hoy"
               value={formatARS(expensesData.total)}
               sublabel={`${expensesData.count} ${expensesData.count === 1 ? 'gasto' : 'gastos'}`}
-              icon={<ShoppingBag className="h-4 w-4" />}
+              icon={<ShoppingBag className="h-5 w-5" />}
             />
           )}
           {isAdmin ? (
@@ -133,7 +133,7 @@ export default async function HomePage() {
                   ? 'Ventas − retiros − gastos'
                   : 'Neto negativo · revisar movimientos'
               }
-              icon={<Banknote className="h-4 w-4" />}
+              icon={<Banknote className="h-5 w-5" />}
               tone={cajaNeta.gte(0) ? 'success' : 'destructive'}
               highlight
             />
@@ -142,7 +142,7 @@ export default async function HomePage() {
               label="Caja del día"
               value={formatARS(cajaCajero.toFixed(2))}
               sublabel="Ventas − retiros"
-              icon={<TrendingUp className="h-4 w-4" />}
+              icon={<TrendingUp className="h-5 w-5" />}
               tone={cajaCajero.gte(0) ? 'success' : 'destructive'}
               highlight
             />
@@ -150,11 +150,11 @@ export default async function HomePage() {
         </section>
 
         <section>
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Acciones rápidas
           </h2>
           <div
-            className={`grid gap-3 ${isAdmin ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}
+            className={`grid gap-4 ${isAdmin ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}
           >
             <QuickAction
               href="/ventas/nueva"
@@ -178,10 +178,10 @@ export default async function HomePage() {
         </section>
 
         <section>
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Operación
           </h2>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
             <NavCard
               icon={<Receipt className="h-5 w-5" />}
               title="Ventas"
@@ -232,10 +232,10 @@ export default async function HomePage() {
 
         {isAdmin && (
           <section>
-            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
               Configuración
             </h2>
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-3">
               <ConfigLink
                 href="/configuracion/marcas-de-tarjeta"
                 icon={<CreditCard className="h-4 w-4" />}
@@ -313,23 +313,23 @@ function KPI({
         : 'text-foreground';
   return (
     <div
-      className={`rounded-card border border-border bg-card p-5 ${
+      className={`rounded-card border border-border bg-card p-7 ${
         highlight ? 'shadow-sm ring-1 ring-primary/10' : ''
       }`}
     >
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {label}
         </span>
         <span className="text-muted-foreground">{icon}</span>
       </div>
       <div
-        className={`mt-3 text-2xl font-semibold tabular-nums tracking-tight ${valueClasses}`}
+        className={`mt-4 text-4xl font-semibold tabular-nums tracking-tight ${valueClasses}`}
       >
         {value}
       </div>
       {sublabel && (
-        <div className="mt-1 text-xs text-muted-foreground">{sublabel}</div>
+        <div className="mt-2 text-sm text-muted-foreground">{sublabel}</div>
       )}
     </div>
   );
@@ -350,24 +350,24 @@ function QuickAction({
   return (
     <Link
       href={href}
-      className={`group flex items-center justify-between rounded-card border px-4 py-3.5 transition ${
+      className={`group flex items-center justify-between rounded-card border px-6 py-5 transition ${
         isPrimary
           ? 'border-primary/30 bg-primary text-primary-foreground hover:opacity-95'
           : 'border-border bg-card hover:border-primary/30 hover:bg-muted/40'
       }`}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-4">
         <span
-          className={`flex h-8 w-8 items-center justify-center rounded-input ${
+          className={`flex h-11 w-11 items-center justify-center rounded-input ${
             isPrimary ? 'bg-primary-foreground/15' : 'bg-primary/10 text-primary'
           }`}
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-5 w-5" />
         </span>
         <div className="leading-tight">
-          <div className="text-sm font-medium">{label}</div>
+          <div className="text-base font-semibold">{label}</div>
           <div
-            className={`text-xs ${
+            className={`mt-0.5 text-sm ${
               isPrimary ? 'text-primary-foreground/80' : 'text-muted-foreground'
             }`}
           >
@@ -376,7 +376,7 @@ function QuickAction({
         </div>
       </div>
       <ArrowRight
-        className={`h-4 w-4 transition group-hover:translate-x-0.5 ${
+        className={`h-5 w-5 transition group-hover:translate-x-0.5 ${
           isPrimary ? 'text-primary-foreground' : 'text-muted-foreground'
         }`}
       />
@@ -398,30 +398,30 @@ function NavCard({
   empty?: string;
 }) {
   return (
-    <div className="rounded-card border border-border bg-card p-5">
-      <div className="flex items-center gap-2.5">
-        <span className="flex h-9 w-9 items-center justify-center rounded-input bg-muted text-foreground">
+    <div className="rounded-card border border-border bg-card p-7">
+      <div className="flex items-center gap-3">
+        <span className="flex h-11 w-11 items-center justify-center rounded-input bg-muted text-foreground">
           {icon}
         </span>
-        <h3 className="text-base font-semibold tracking-tight">{title}</h3>
+        <h3 className="text-lg font-semibold tracking-tight">{title}</h3>
       </div>
-      <p className="mt-2.5 text-xs leading-relaxed text-muted-foreground">
+      <p className="mt-3.5 text-sm leading-relaxed text-muted-foreground">
         {description}
       </p>
       {links.length > 0 ? (
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-5 flex flex-wrap gap-2">
           {links.map((l) => (
             <Link
               key={l.href}
               href={l.href}
-              className="inline-flex items-center rounded-input border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted"
+              className="inline-flex items-center rounded-input border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted"
             >
               {l.label}
             </Link>
           ))}
         </div>
       ) : empty ? (
-        <p className="mt-4 text-[11px] uppercase tracking-wide text-muted-foreground">
+        <p className="mt-5 text-xs uppercase tracking-wide text-muted-foreground">
           {empty}
         </p>
       ) : null}
@@ -441,12 +441,12 @@ function ConfigLink({
   return (
     <Link
       href={href}
-      className="group flex items-center gap-3 rounded-card border border-border bg-card px-4 py-3 transition hover:border-primary/30 hover:bg-muted/40"
+      className="group flex items-center gap-3.5 rounded-card border border-border bg-card px-5 py-4 transition hover:border-primary/30 hover:bg-muted/40"
     >
       <span className="text-muted-foreground transition group-hover:text-foreground">
         {icon}
       </span>
-      <span className="text-sm font-medium">{label}</span>
+      <span className="text-base font-medium">{label}</span>
       <ArrowRight className="ml-auto h-4 w-4 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-foreground" />
     </Link>
   );
