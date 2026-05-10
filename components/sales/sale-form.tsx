@@ -78,6 +78,10 @@ type Props =
   | {
       mode: 'create';
       cardBrands: CardBrandOption[];
+      /** When true, render the saleDate input so super_admin can backdate. */
+      canBackdate?: boolean;
+      /** Today in APP_TZ (YYYY-MM-DD) — used as default + max for the date input. */
+      todayInAppTZ?: string;
     }
   | {
       mode: 'edit';
@@ -217,18 +221,24 @@ export function SaleForm(props: Props) {
         )}
       </div>
 
-      {/* Sale date — edit mode only (D-016) */}
-      {mode === 'edit' && (
+      {/* Sale date — edit mode (D-016) or create when admin can backdate. */}
+      {(mode === 'edit' || (mode === 'create' && props.canBackdate)) && (
         <div className="flex flex-col gap-2">
           <Label htmlFor="saleDate">Fecha de la venta</Label>
           <Input
             id="saleDate"
             type="date"
+            max={mode === 'create' ? props.todayInAppTZ : undefined}
             aria-invalid={Boolean(formState.errors.saleDate)}
-            {...register('saleDate')}
+            {...register('saleDate', {
+              setValueAs: (v) =>
+                typeof v === 'string' && v.length > 0 ? v : undefined,
+            })}
           />
           <p className="text-xs text-muted-foreground">
-            Solo se puede mover la fecha hasta 60 días hacia atrás. La hora original se preserva.
+            {mode === 'create'
+              ? 'Dejá vacío para usar la fecha de hoy, o elegí una fecha hasta 60 días atrás.'
+              : 'Solo se puede mover la fecha hasta 60 días hacia atrás. La hora original se preserva.'}
           </p>
           {formState.errors.saleDate && (
             <p className="text-xs text-destructive">{formState.errors.saleDate.message}</p>

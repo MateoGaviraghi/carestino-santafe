@@ -5,6 +5,7 @@ import {
   UnauthorizedError,
   getSessionUser,
 } from '@/lib/auth';
+import { todayInAppTZ } from '@/lib/dates';
 import { listActiveWithdrawalPersons } from '@/lib/queries/withdrawals';
 import { WithdrawalForm } from '@/components/withdrawals/withdrawal-form';
 
@@ -12,8 +13,9 @@ export const dynamic = 'force-dynamic';
 
 export default async function NewWithdrawalPage() {
   // Both roles can create withdrawals (08-SECURITY.md matrix).
+  let session;
   try {
-    await getSessionUser();
+    session = await getSessionUser();
   } catch (e) {
     if (e instanceof UnauthorizedError) redirect('/');
     if (e instanceof ForbiddenError) redirect('/');
@@ -21,6 +23,8 @@ export default async function NewWithdrawalPage() {
   }
 
   const persons = await listActiveWithdrawalPersons();
+  const canBackdate = session.role === 'super_admin';
+  const today = todayInAppTZ();
 
   return (
     <main className="mx-auto max-w-xl px-4 py-8 sm:px-6 sm:py-10">
@@ -36,7 +40,12 @@ export default async function NewWithdrawalPage() {
           Cargá el monto y la persona que retira.
         </p>
       </header>
-      <WithdrawalForm mode="create" persons={persons} />
+      <WithdrawalForm
+        mode="create"
+        persons={persons}
+        canBackdate={canBackdate}
+        todayInAppTZ={today}
+      />
     </main>
   );
 }

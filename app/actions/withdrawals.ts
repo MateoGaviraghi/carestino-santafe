@@ -73,6 +73,15 @@ function rebuildWithdrawalDate(originalUtc: Date, newDateStr: string): Date {
   return fromZonedTime(`${newDateStr}T${time}`, APP_TZ);
 }
 
+/**
+ * Build a UTC Date for a backdated withdrawal: chosen day + current
+ * wall-clock time in APP_TZ. Same approach as buildBackdatedSaleDate.
+ */
+function buildBackdatedWithdrawalDate(dateStr: string): Date {
+  const nowHms = formatInTimeZone(new Date(), APP_TZ, 'HH:mm:ss.SSS');
+  return fromZonedTime(`${dateStr}T${nowHms}`, APP_TZ);
+}
+
 // -----------------------------------------------------------------------------
 // createWithdrawal — both roles.
 // -----------------------------------------------------------------------------
@@ -97,6 +106,14 @@ export async function createWithdrawal(
     throw e;
   }
 
+  // Backdating gate: super_admin only.
+  if (parsed.withdrawalDate && user.role !== 'super_admin') {
+    return { ok: false, error: 'forbidden' };
+  }
+  const customWithdrawalDate = parsed.withdrawalDate
+    ? buildBackdatedWithdrawalDate(parsed.withdrawalDate)
+    : null;
+
   const db = getDb();
   try {
     const inserted = await db
@@ -105,6 +122,7 @@ export async function createWithdrawal(
         amount: parsed.amount,
         personId: parsed.personId,
         createdBy: user.userId,
+        ...(customWithdrawalDate ? { withdrawalDate: customWithdrawalDate } : {}),
       })
       .returning({ id: withdrawals.id });
     const head = inserted[0];

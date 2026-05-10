@@ -21,10 +21,18 @@ const moneyString = z
 
 const personIdSchema = z.number().int().positive();
 
+const editableDateSchema = z
+  .string()
+  .refine(isValidDateString, { message: 'fecha_invalida' })
+  .refine((s) => isWithinDaysWindow(s, WITHDRAWAL_DATE_EDIT_WINDOW_DAYS), {
+    message: 'fecha_fuera_de_rango',
+  });
+
 export const createWithdrawalSchema = z
   .object({
     amount: moneyString,
     personId: personIdSchema,
+    withdrawalDate: editableDateSchema.optional(),
   })
   .superRefine((data, ctx) => {
     const amount = safeDecimal(data.amount);
@@ -35,13 +43,6 @@ export const createWithdrawalSchema = z
         path: ['amount'],
       });
     }
-  });
-
-const editableDateSchema = z
-  .string()
-  .refine(isValidDateString, { message: 'fecha_invalida' })
-  .refine((s) => isWithinDaysWindow(s, WITHDRAWAL_DATE_EDIT_WINDOW_DAYS), {
-    message: 'fecha_fuera_de_rango',
   });
 
 export const updateWithdrawalSchema = z

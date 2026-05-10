@@ -163,6 +163,57 @@ describe('createSale', () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toBe('validation_error');
   });
+
+  it('accepts a backdated saleDate inside the 60-day window (super_admin)', async () => {
+    // 8 days back — well inside the 60-day window
+    const eightDaysAgo = (() => {
+      const today = todayInAppTZ();
+      const [y, m, d] = today.split('-').map(Number) as [number, number, number];
+      const anchor = new Date(Date.UTC(y, m - 1, d, 12));
+      anchor.setUTCDate(anchor.getUTCDate() - 8);
+      return anchor.toISOString().slice(0, 10);
+    })();
+    const r = await createSale({
+      totalAmount: '700.00',
+      payments: [{ method: 'efectivo', amount: '700.00' }],
+      saleDate: eightDaysAgo,
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+
+    const saleRow = await db.select().from(sales).where(eq(sales.id, r.data.saleId));
+    expect(saleRow).toHaveLength(1);
+    // saleDate stored should fall on the chosen calendar day (in APP_TZ).
+    const stored = saleRow[0]!.saleDate;
+    const storedYmd = new Date(stored.getTime() - 3 * 60 * 60 * 1000) // APP_TZ offset
+      .toISOString()
+      .slice(0, 10);
+    expect(storedYmd).toBe(eightDaysAgo);
+  });
+
+  it('rejects a backdated saleDate outside the 60-day window (validation_error)', async () => {
+    const r = await createSale({
+      totalAmount: '500.00',
+      payments: [{ method: 'efectivo', amount: '500.00' }],
+      saleDate: '2020-01-01',
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toBe('validation_error');
+  });
+
+  it('rejects backdating attempt by cajero (forbidden)', async () => {
+    vi.mocked(requireRole).mockResolvedValueOnce({
+      userId: TEST_USER_ID,
+      role: 'cajero',
+    } satisfies SessionUser);
+    const r = await createSale({
+      totalAmount: '300.00',
+      payments: [{ method: 'efectivo', amount: '300.00' }],
+      saleDate: todayInAppTZ(),
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toBe('forbidden');
+  });
 });
 
 // -----------------------------------------------------------------------------

@@ -52,6 +52,8 @@ type Props =
       mode: 'create';
       cardBrands: CardBrandOption[];
       providers: string[];
+      /** Today in APP_TZ (YYYY-MM-DD). Used as max attribute on date input. */
+      todayInAppTZ?: string;
     }
   | {
       mode: 'edit';
@@ -292,26 +294,31 @@ export function ExpenseForm(props: Props) {
         )}
       </div>
 
-      {/* Date — edit mode only (D-016) */}
-      {mode === 'edit' && (
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="expenseDate">Fecha del gasto</Label>
-          <Input
-            id="expenseDate"
-            type="date"
-            aria-invalid={Boolean(formState.errors.expenseDate)}
-            {...register('expenseDate')}
-          />
-          <p className="text-xs text-muted-foreground">
-            Solo se puede mover hasta 60 días hacia atrás. La hora original se preserva.
+      {/* Date — always available (super_admin-only flow). Lets the admin
+          backdate a gasto pagado un día anterior. */}
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="expenseDate">Fecha del gasto</Label>
+        <Input
+          id="expenseDate"
+          type="date"
+          max={mode === 'create' ? props.todayInAppTZ : undefined}
+          aria-invalid={Boolean(formState.errors.expenseDate)}
+          {...register('expenseDate', {
+            setValueAs: (v) =>
+              typeof v === 'string' && v.length > 0 ? v : undefined,
+          })}
+        />
+        <p className="text-xs text-muted-foreground">
+          {mode === 'create'
+            ? 'Dejá vacío para usar la fecha de hoy, o elegí una fecha hasta 60 días atrás.'
+            : 'Solo se puede mover hasta 60 días hacia atrás. La hora original se preserva.'}
+        </p>
+        {formState.errors.expenseDate && (
+          <p className="text-xs text-destructive">
+            {formState.errors.expenseDate.message}
           </p>
-          {formState.errors.expenseDate && (
-            <p className="text-xs text-destructive">
-              {formState.errors.expenseDate.message}
-            </p>
-          )}
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Observations */}
       <div className="flex flex-col gap-2">

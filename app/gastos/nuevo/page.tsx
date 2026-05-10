@@ -5,6 +5,7 @@ import {
   UnauthorizedError,
   requireRole,
 } from '@/lib/auth';
+import { todayInAppTZ } from '@/lib/dates';
 import { listActiveCardBrands } from '@/lib/queries/card-brands';
 import { listExpenseProviders } from '@/lib/queries/expenses';
 import { ExpenseForm } from '@/components/expenses/expense-form';
@@ -39,7 +40,12 @@ export default async function NewExpensePage() {
           Cargá el proveedor, monto y método de pago.
         </p>
       </header>
-      <ExpenseForm mode="create" cardBrands={cardBrands} providers={providers} />
+      <ExpenseForm
+        mode="create"
+        cardBrands={cardBrands}
+        providers={providers}
+        todayInAppTZ={todayInAppTZ()}
+      />
     </main>
   );
 }

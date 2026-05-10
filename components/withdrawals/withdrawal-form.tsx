@@ -43,6 +43,10 @@ type Props =
   | {
       mode: 'create';
       persons: WithdrawalPersonOption[];
+      /** When true, render the date input so super_admin can backdate. */
+      canBackdate?: boolean;
+      /** Today in APP_TZ (YYYY-MM-DD). Used as max attribute on date input. */
+      todayInAppTZ?: string;
     }
   | {
       mode: 'edit';
@@ -171,18 +175,24 @@ export function WithdrawalForm(props: Props) {
         )}
       </div>
 
-      {/* Date — edit mode only (D-016) */}
-      {mode === 'edit' && (
+      {/* Date — edit mode (D-016) or create when admin can backdate. */}
+      {(mode === 'edit' || (mode === 'create' && props.canBackdate)) && (
         <div className="flex flex-col gap-2">
           <Label htmlFor="withdrawalDate">Fecha del retiro</Label>
           <Input
             id="withdrawalDate"
             type="date"
+            max={mode === 'create' ? props.todayInAppTZ : undefined}
             aria-invalid={Boolean(formState.errors.withdrawalDate)}
-            {...register('withdrawalDate')}
+            {...register('withdrawalDate', {
+              setValueAs: (v) =>
+                typeof v === 'string' && v.length > 0 ? v : undefined,
+            })}
           />
           <p className="text-xs text-muted-foreground">
-            Solo se puede mover hasta 60 días hacia atrás. La hora original se preserva.
+            {mode === 'create'
+              ? 'Dejá vacío para usar la fecha de hoy, o elegí una fecha hasta 60 días atrás.'
+              : 'Solo se puede mover hasta 60 días hacia atrás. La hora original se preserva.'}
           </p>
           {formState.errors.withdrawalDate && (
             <p className="text-xs text-destructive">

@@ -11,6 +11,7 @@ import {
   UnauthorizedError,
   type SessionUser,
 } from '@/lib/auth';
+import { todayInAppTZ } from '@/lib/dates';
 
 const TEST_USER_ID = '__test_expense_user__';
 const TEST_PROVIDER_PREFIX = 'Test-Expense-';
@@ -96,6 +97,34 @@ describe('createExpense — super_admin only', () => {
       method: 'efectivo',
     });
     expect(r.ok).toBe(true);
+  });
+
+  it('accepts a backdated expenseDate inside the 60-day window', async () => {
+    const tenDaysAgo = (() => {
+      const today = todayInAppTZ();
+      const [y, m, d] = today.split('-').map(Number) as [number, number, number];
+      const anchor = new Date(Date.UTC(y, m - 1, d, 12));
+      anchor.setUTCDate(anchor.getUTCDate() - 10);
+      return anchor.toISOString().slice(0, 10);
+    })();
+    const r = await createExpense({
+      provider: `${TEST_PROVIDER_PREFIX}Backdated`,
+      amount: '300.00',
+      method: 'efectivo',
+      expenseDate: tenDaysAgo,
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it('rejects a backdated expenseDate outside the 60-day window (validation_error)', async () => {
+    const r = await createExpense({
+      provider: `${TEST_PROVIDER_PREFIX}OutOfRange`,
+      amount: '300.00',
+      method: 'efectivo',
+      expenseDate: '2020-01-01',
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toBe('validation_error');
   });
 });
 

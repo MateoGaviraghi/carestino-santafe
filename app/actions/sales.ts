@@ -18,6 +18,7 @@
 import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
 import { ZodError } from 'zod';
+import { fromZonedTime, formatInTimeZone } from 'date-fns-tz';
 import { getDb } from '@/db';
 import { sales, salePayments } from '@/db/schema';
 import {
@@ -26,6 +27,7 @@ import {
   requireRole,
   type SessionUser,
 } from '@/lib/auth';
+import { APP_TZ } from '@/lib/dates';
 import {
   createSaleSchema,
   updateSaleSchema,
@@ -94,6 +96,16 @@ export async function createSale(
     throw e;
   }
 
+  // Backdating gate: only super_admin can pick a custom saleDate (D-016
+  // extended to CREATE). Cajero attempting to backdate is rejected — defense
+  // in depth; the form hides the field for non-admins anyway.
+  if (parsed.saleDate && user.role !== 'super_admin') {
+    return { ok: false, error: 'forbidden' };
+  }
+  const customSaleDate = parsed.saleDate
+    ? buildBackdatedSaleDate(parsed.saleDate)
+    : null;
+
   const db = getDb();
   const saleId = crypto.randomUUID();
   try {
@@ -103,6 +115,7 @@ export async function createSale(
         totalAmount: parsed.totalAmount,
         observations: parsed.observations ?? null,
         createdBy: user.userId,
+        ...(customSaleDate ? { saleDate: customSaleDate } : {}),
       }),
       db.insert(salePayments).values(
         parsed.payments.map((p) => ({
@@ -142,8 +155,15 @@ export async function createSale(
 // genuinely intends a backdating, in which case they pick a different day.
 // -----------------------------------------------------------------------------
 
-import { APP_TZ } from '@/lib/dates';
-import { fromZonedTime, formatInTimeZone } from 'date-fns-tz';
+/**
+ * Build a UTC Date for a backdated sale: chosen calendar day in APP_TZ +
+ * current wall-clock time in APP_TZ. Keeps the new row time-sorted
+ * naturally inside the chosen day's planilla.
+ */
+function buildBackdatedSaleDate(dateStr: string): Date {
+  const nowHms = formatInTimeZone(new Date(), APP_TZ, 'HH:mm:ss.SSS');
+  return fromZonedTime(`${dateStr}T${nowHms}`, APP_TZ);
+}
 
 function rebuildSaleDate(originalUtc: Date, newDateStr: string): Date {
   // Preserve the wall-clock HH:mm:ss of the original (interpreted in APP_TZ),

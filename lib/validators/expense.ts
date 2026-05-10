@@ -73,16 +73,16 @@ function applyCoherenceChecks(
   }
 }
 
-export const createExpenseSchema = z
-  .object(baseExpenseShape)
-  .superRefine(applyCoherenceChecks);
-
 const editableDateSchema = z
   .string()
   .refine(isValidDateString, { message: 'fecha_invalida' })
   .refine((s) => isWithinDaysWindow(s, EXPENSE_DATE_EDIT_WINDOW_DAYS), {
     message: 'fecha_fuera_de_rango',
   });
+
+export const createExpenseSchema = z
+  .object({ ...baseExpenseShape, expenseDate: editableDateSchema.optional() })
+  .superRefine(applyCoherenceChecks);
 
 export const updateExpenseSchema = z
   .object({ ...baseExpenseShape, expenseDate: editableDateSchema.optional() })

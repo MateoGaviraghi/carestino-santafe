@@ -78,11 +78,23 @@ export const paymentInputSchema = z
     }
   });
 
+/**
+ * D-016 (extended): same 60-day window applies to backdating on CREATE
+ * (super_admin only — gated server-side).
+ */
+const editableSaleDateSchema = z
+  .string()
+  .refine(isValidDateString, { message: 'fecha_invalida' })
+  .refine((s) => isWithinDaysWindow(s, SALE_DATE_EDIT_WINDOW_DAYS), {
+    message: 'fecha_fuera_de_rango',
+  });
+
 export const createSaleSchema = z
   .object({
     totalAmount: moneyString,
     observations: z.string().max(2000).optional(),
     payments: z.array(paymentInputSchema).min(1, 'al_menos_un_pago'),
+    saleDate: editableSaleDateSchema.optional(),
   })
   .superRefine((data, ctx) => {
     const total = safeDecimal(data.totalAmount);
@@ -128,13 +140,6 @@ export const ALLOWED_INSTALLMENTS_LITERAL = ALLOWED_INSTALLMENTS;
 // original wall-clock TIME of the sale is preserved by the Server Action;
 // this validator only checks calendar correctness.
 // -----------------------------------------------------------------------------
-
-const editableSaleDateSchema = z
-  .string()
-  .refine(isValidDateString, { message: 'fecha_invalida' })
-  .refine((s) => isWithinDaysWindow(s, SALE_DATE_EDIT_WINDOW_DAYS), {
-    message: 'fecha_fuera_de_rango',
-  });
 
 export const updateSaleSchema = z
   .object({

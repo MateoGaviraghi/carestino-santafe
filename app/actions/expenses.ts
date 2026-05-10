@@ -60,6 +60,11 @@ function rebuildExpenseDate(originalUtc: Date, newDateStr: string): Date {
   return fromZonedTime(`${newDateStr}T${time}`, APP_TZ);
 }
 
+function buildBackdatedExpenseDate(dateStr: string): Date {
+  const nowHms = formatInTimeZone(new Date(), APP_TZ, 'HH:mm:ss.SSS');
+  return fromZonedTime(`${dateStr}T${nowHms}`, APP_TZ);
+}
+
 async function gateAdmin(): Promise<
   | { ok: false; error: 'unauthorized' | 'forbidden' }
   | { user: SessionUser }
@@ -93,6 +98,11 @@ export async function createExpense(
     throw e;
   }
 
+  // expenseDate backdating: gate already checked super_admin in gateAdmin().
+  const customExpenseDate = parsed.expenseDate
+    ? buildBackdatedExpenseDate(parsed.expenseDate)
+    : null;
+
   const db = getDb();
   try {
     const inserted = await db
@@ -105,6 +115,7 @@ export async function createExpense(
         installments: parsed.installments ?? null,
         observations: parsed.observations ?? null,
         createdBy: user.userId,
+        ...(customExpenseDate ? { expenseDate: customExpenseDate } : {}),
       })
       .returning({ id: expenses.id });
     const head = inserted[0];

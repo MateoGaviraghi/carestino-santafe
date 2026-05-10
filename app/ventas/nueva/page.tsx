@@ -5,6 +5,7 @@ import {
   UnauthorizedError,
   getSessionUser,
 } from '@/lib/auth';
+import { todayInAppTZ } from '@/lib/dates';
 import { listActiveCardBrands } from '@/lib/queries/card-brands';
 import { SaleForm } from '@/components/sales/sale-form';
 
@@ -12,8 +13,9 @@ export const dynamic = 'force-dynamic';
 
 export default async function NewSalePage() {
   // Both roles can create sales — middleware already gated unauthenticated.
+  let session;
   try {
-    await getSessionUser();
+    session = await getSessionUser();
   } catch (e) {
     if (e instanceof UnauthorizedError) redirect('/');
     if (e instanceof ForbiddenError) redirect('/');
@@ -21,6 +23,8 @@ export default async function NewSalePage() {
   }
 
   const cardBrands = await listActiveCardBrands();
+  const canBackdate = session.role === 'super_admin';
+  const today = todayInAppTZ();
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-10">
@@ -39,7 +43,12 @@ export default async function NewSalePage() {
         </div>
       </header>
 
-      <SaleForm mode="create" cardBrands={cardBrands} />
+      <SaleForm
+        mode="create"
+        cardBrands={cardBrands}
+        canBackdate={canBackdate}
+        todayInAppTZ={today}
+      />
     </main>
   );
 }
