@@ -78,10 +78,15 @@ type Props =
   | {
       mode: 'create';
       cardBrands: CardBrandOption[];
-      /** When true, render the saleDate input so super_admin can backdate. */
-      canBackdate?: boolean;
-      /** Today in APP_TZ (YYYY-MM-DD) — used as default + max for the date input. */
-      todayInAppTZ?: string;
+      /**
+       * Hidden backdate: when set, the form submits with this saleDate instead
+       * of letting the server default to "now()". Driven by the planilla URL
+       * (?date=YYYY-MM-DD) — never edited inside the form. Already validated
+       * upstream by the page (admin only, within 60-day window).
+       */
+      prefillDate?: string;
+      /** Long-form Spanish label of prefillDate (e.g. "viernes, 2 de mayo de 2026"). */
+      prefillDateLabel?: string;
     }
   | {
       mode: 'edit';
@@ -102,8 +107,10 @@ export function SaleForm(props: Props) {
   const [pendingConfirm, setPendingConfirm] = useState<UpdateSaleInput | null>(null);
   const totalInputRef = useRef<HTMLInputElement | null>(null);
 
-  const initialValues =
-    mode === 'edit' ? props.defaultValues : EMPTY_FORM;
+  const initialValues: UpdateSaleInput =
+    mode === 'edit'
+      ? props.defaultValues
+      : { ...EMPTY_FORM, saleDate: props.prefillDate ?? undefined };
 
   const form = useForm<UpdateSaleInput>({
     resolver: zodResolver(updateSaleSchema),
@@ -162,7 +169,9 @@ export function SaleForm(props: Props) {
         if (result.ok) {
           setPendingConfirm(null);
           setSuccessToast({ amount: data.totalAmount, referenceId: result.data.saleId });
-          reset(EMPTY_FORM);
+          // Preserve the prefilled date across submissions so the admin can
+          // keep loading sales for the same past day without re-clicking.
+          reset(initialValues);
           totalInputRef.current?.focus();
           router.refresh();
         } else {
@@ -196,6 +205,21 @@ export function SaleForm(props: Props) {
 
   return (
     <form onSubmit={onSubmit} className="space-y-6" aria-busy={isPending}>
+      {/* Backdate banner — only when create mode + URL drove a past date. */}
+      {mode === 'create' && props.prefillDate && (
+        <div
+          role="status"
+          className="rounded-card border border-primary/30 bg-primary/5 px-4 py-3 text-sm"
+        >
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Cargando para
+          </div>
+          <div className="mt-0.5 font-medium capitalize text-primary">
+            {props.prefillDateLabel ?? props.prefillDate}
+          </div>
+        </div>
+      )}
+
       {/* Total */}
       <div className="flex flex-col gap-2">
         <Label htmlFor="totalAmount">Total</Label>
@@ -221,29 +245,28 @@ export function SaleForm(props: Props) {
         )}
       </div>
 
-      {/* Sale date — edit mode (D-016) or create when admin can backdate. */}
-      {(mode === 'edit' || (mode === 'create' && props.canBackdate)) && (
+      {/* Sale date — edit mode only (D-016). In create mode, the date comes
+          from the planilla URL (prefillDate) — banner above shows it. */}
+      {mode === 'edit' && (
         <div className="flex flex-col gap-2">
           <Label htmlFor="saleDate">Fecha de la venta</Label>
           <Input
             id="saleDate"
             type="date"
-            max={mode === 'create' ? props.todayInAppTZ : undefined}
             aria-invalid={Boolean(formState.errors.saleDate)}
-            {...register('saleDate', {
-              setValueAs: (v) =>
-                typeof v === 'string' && v.length > 0 ? v : undefined,
-            })}
+            {...register('saleDate')}
           />
           <p className="text-xs text-muted-foreground">
-            {mode === 'create'
-              ? 'Dejá vacío para usar la fecha de hoy, o elegí una fecha hasta 60 días atrás.'
-              : 'Solo se puede mover la fecha hasta 60 días hacia atrás. La hora original se preserva.'}
+            Solo se puede mover la fecha hasta 60 días hacia atrás. La hora original se preserva.
           </p>
           {formState.errors.saleDate && (
             <p className="text-xs text-destructive">{formState.errors.saleDate.message}</p>
           )}
         </div>
+      )}
+      {/* Hidden saleDate carrier (only when prefilled from URL) so RHF tracks the value. */}
+      {mode === 'create' && props.prefillDate && (
+        <input type="hidden" {...register('saleDate')} />
       )}
 
       {/* Payments */}

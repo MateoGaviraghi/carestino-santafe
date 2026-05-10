@@ -52,8 +52,12 @@ type Props =
       mode: 'create';
       cardBrands: CardBrandOption[];
       providers: string[];
-      /** Today in APP_TZ (YYYY-MM-DD). Used as max attribute on date input. */
-      todayInAppTZ?: string;
+      /**
+       * Hidden backdate driven by the lista URL when filters specify a single
+       * day (?from=X&to=X). Already validated upstream.
+       */
+      prefillDate?: string;
+      prefillDateLabel?: string;
     }
   | {
       mode: 'edit';
@@ -83,7 +87,10 @@ export function ExpenseForm(props: Props) {
   const [pendingConfirm, setPendingConfirm] = useState<UpdateExpenseInput | null>(null);
   const providerRef = useRef<HTMLInputElement | null>(null);
 
-  const initial = mode === 'edit' ? props.defaultValues : EMPTY_FORM;
+  const initial: UpdateExpenseInput =
+    mode === 'edit'
+      ? props.defaultValues
+      : { ...EMPTY_FORM, expenseDate: props.prefillDate ?? undefined };
 
   const form = useForm<UpdateExpenseInput>({
     resolver: zodResolver(updateExpenseSchema),
@@ -116,7 +123,9 @@ export function ExpenseForm(props: Props) {
         setPendingConfirm(null);
         setSuccessToast({ amount: data.amount, referenceId: result.data.expenseId });
         if (mode === 'create') {
-          reset(EMPTY_FORM);
+          // Preserve prefillDate after a successful save so the admin keeps
+          // backdating to the same day without re-clicking.
+          reset(initial);
           providerRef.current?.focus();
           router.refresh();
         } else {
@@ -150,6 +159,20 @@ export function ExpenseForm(props: Props) {
 
   return (
     <form onSubmit={onSubmit} className="space-y-6" aria-busy={isPending}>
+      {mode === 'create' && props.prefillDate && (
+        <div
+          role="status"
+          className="rounded-card border border-primary/30 bg-primary/5 px-4 py-3 text-sm"
+        >
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Cargando para
+          </div>
+          <div className="mt-0.5 font-medium capitalize text-primary">
+            {props.prefillDateLabel ?? props.prefillDate}
+          </div>
+        </div>
+      )}
+
       {/* Provider */}
       <div className="flex flex-col gap-2">
         <Label htmlFor="provider">Proveedor</Label>
@@ -294,31 +317,29 @@ export function ExpenseForm(props: Props) {
         )}
       </div>
 
-      {/* Date — always available (super_admin-only flow). Lets the admin
-          backdate a gasto pagado un día anterior. */}
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="expenseDate">Fecha del gasto</Label>
-        <Input
-          id="expenseDate"
-          type="date"
-          max={mode === 'create' ? props.todayInAppTZ : undefined}
-          aria-invalid={Boolean(formState.errors.expenseDate)}
-          {...register('expenseDate', {
-            setValueAs: (v) =>
-              typeof v === 'string' && v.length > 0 ? v : undefined,
-          })}
-        />
-        <p className="text-xs text-muted-foreground">
-          {mode === 'create'
-            ? 'Dejá vacío para usar la fecha de hoy, o elegí una fecha hasta 60 días atrás.'
-            : 'Solo se puede mover hasta 60 días hacia atrás. La hora original se preserva.'}
-        </p>
-        {formState.errors.expenseDate && (
-          <p className="text-xs text-destructive">
-            {formState.errors.expenseDate.message}
+      {/* Date — edit mode only. In create mode the date comes from URL prefill. */}
+      {mode === 'edit' && (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="expenseDate">Fecha del gasto</Label>
+          <Input
+            id="expenseDate"
+            type="date"
+            aria-invalid={Boolean(formState.errors.expenseDate)}
+            {...register('expenseDate')}
+          />
+          <p className="text-xs text-muted-foreground">
+            Solo se puede mover hasta 60 días hacia atrás. La hora original se preserva.
           </p>
-        )}
-      </div>
+          {formState.errors.expenseDate && (
+            <p className="text-xs text-destructive">
+              {formState.errors.expenseDate.message}
+            </p>
+          )}
+        </div>
+      )}
+      {mode === 'create' && props.prefillDate && (
+        <input type="hidden" {...register('expenseDate')} />
+      )}
 
       {/* Observations */}
       <div className="flex flex-col gap-2">

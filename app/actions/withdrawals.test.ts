@@ -15,7 +15,6 @@ import {
   UnauthorizedError,
   type SessionUser,
 } from '@/lib/auth';
-import { todayInAppTZ } from '@/lib/dates';
 
 const TEST_USER_ID = '__test_withdrawal_user__';
 const TEST_PERSON_NAME = 'Test-Person-Withdrawals';

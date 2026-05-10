@@ -43,10 +43,12 @@ type Props =
   | {
       mode: 'create';
       persons: WithdrawalPersonOption[];
-      /** When true, render the date input so super_admin can backdate. */
-      canBackdate?: boolean;
-      /** Today in APP_TZ (YYYY-MM-DD). Used as max attribute on date input. */
-      todayInAppTZ?: string;
+      /**
+       * Hidden backdate driven by the planilla URL (?date=YYYY-MM-DD).
+       * Already validated upstream (admin + within 60-day window).
+       */
+      prefillDate?: string;
+      prefillDateLabel?: string;
     }
   | {
       mode: 'edit';
@@ -73,7 +75,10 @@ export function WithdrawalForm(props: Props) {
   const [pendingConfirm, setPendingConfirm] = useState<UpdateWithdrawalInput | null>(null);
   const amountRef = useRef<HTMLInputElement | null>(null);
 
-  const initial = mode === 'edit' ? props.defaultValues : EMPTY_FORM;
+  const initial: UpdateWithdrawalInput =
+    mode === 'edit'
+      ? props.defaultValues
+      : { ...EMPTY_FORM, withdrawalDate: props.prefillDate ?? undefined };
 
   const form = useForm<UpdateWithdrawalInput>({
     resolver: zodResolver(updateWithdrawalSchema),
@@ -103,7 +108,9 @@ export function WithdrawalForm(props: Props) {
         setPendingConfirm(null);
         setSuccessToast({ amount: data.amount, referenceId: result.data.withdrawalId });
         if (mode === 'create') {
-          reset(EMPTY_FORM);
+          // Preserve prefillDate so the admin keeps loading retiros for the
+          // same past day after a successful save.
+          reset(initial);
           amountRef.current?.focus();
           router.refresh();
         } else {
@@ -126,6 +133,20 @@ export function WithdrawalForm(props: Props) {
 
   return (
     <form onSubmit={onSubmit} className="space-y-6" aria-busy={isPending}>
+      {mode === 'create' && props.prefillDate && (
+        <div
+          role="status"
+          className="rounded-card border border-primary/30 bg-primary/5 px-4 py-3 text-sm"
+        >
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Cargando para
+          </div>
+          <div className="mt-0.5 font-medium capitalize text-primary">
+            {props.prefillDateLabel ?? props.prefillDate}
+          </div>
+        </div>
+      )}
+
       {/* Amount */}
       <div className="flex flex-col gap-2">
         <Label htmlFor="amount">Monto</Label>
@@ -175,24 +196,18 @@ export function WithdrawalForm(props: Props) {
         )}
       </div>
 
-      {/* Date — edit mode (D-016) or create when admin can backdate. */}
-      {(mode === 'edit' || (mode === 'create' && props.canBackdate)) && (
+      {/* Date — edit mode only (D-016). In create mode, comes from URL. */}
+      {mode === 'edit' && (
         <div className="flex flex-col gap-2">
           <Label htmlFor="withdrawalDate">Fecha del retiro</Label>
           <Input
             id="withdrawalDate"
             type="date"
-            max={mode === 'create' ? props.todayInAppTZ : undefined}
             aria-invalid={Boolean(formState.errors.withdrawalDate)}
-            {...register('withdrawalDate', {
-              setValueAs: (v) =>
-                typeof v === 'string' && v.length > 0 ? v : undefined,
-            })}
+            {...register('withdrawalDate')}
           />
           <p className="text-xs text-muted-foreground">
-            {mode === 'create'
-              ? 'Dejá vacío para usar la fecha de hoy, o elegí una fecha hasta 60 días atrás.'
-              : 'Solo se puede mover hasta 60 días hacia atrás. La hora original se preserva.'}
+            Solo se puede mover hasta 60 días hacia atrás. La hora original se preserva.
           </p>
           {formState.errors.withdrawalDate && (
             <p className="text-xs text-destructive">
@@ -200,6 +215,9 @@ export function WithdrawalForm(props: Props) {
             </p>
           )}
         </div>
+      )}
+      {mode === 'create' && props.prefillDate && (
+        <input type="hidden" {...register('withdrawalDate')} />
       )}
 
       {errorMessage && (

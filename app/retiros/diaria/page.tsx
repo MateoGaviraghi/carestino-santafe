@@ -88,10 +88,10 @@ export default async function DailyWithdrawalsPage({
             PDF
           </a>
           <Link
-            href="/retiros/nuevo"
+            href={isToday ? '/retiros/nuevo' : `/retiros/nuevo?date=${date}`}
             className="col-span-2 inline-flex h-11 items-center justify-center rounded-input bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90 sm:col-span-1 sm:h-9 sm:px-3 sm:text-xs"
           >
-            + Nuevo retiro
+            + Nuevo retiro{!isToday ? ' (este día)' : ''}
           </Link>
         </div>
       </header>
@@ -104,10 +104,10 @@ export default async function DailyWithdrawalsPage({
             No hay retiros registrados para esta fecha.
           </p>
           <Link
-            href="/retiros/nuevo"
+            href={isToday ? '/retiros/nuevo' : `/retiros/nuevo?date=${date}`}
             className="rounded-input bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
           >
-            Registrar el primer retiro
+            Registrar el primer retiro{!isToday ? ' de ese día' : ''}
           </Link>
         </div>
       ) : (
