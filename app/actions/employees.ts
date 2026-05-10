@@ -13,12 +13,12 @@
  * locking themselves out.
  */
 import { revalidatePath } from 'next/cache';
-import { eq } from 'drizzle-orm';
+import { count, eq } from 'drizzle-orm';
 import { ZodError } from 'zod';
 import { clerkClient } from '@clerk/nextjs/server';
 
 import { getDb } from '@/db';
-import { users, type Role } from '@/db/schema';
+import { expenses, sales, users, withdrawals, type Role } from '@/db/schema';
 import {
   ForbiddenError,
   UnauthorizedError,
@@ -39,6 +39,7 @@ export type EmployeeActionError =
   | 'self_edit_blocked'
   | 'already_exists'
   | 'not_found'
+  | 'has_history'
   | 'clerk_error'
   | 'internal_error';
 
@@ -278,6 +279,93 @@ export async function setEmployeeActive(
   } catch (e) {
     console.error('setEmployeeActive local mirror failed:', e);
     return { ok: false, error: 'internal_error' };
+  }
+
+  REVALIDATE_PATHS.forEach((p) => revalidatePath(p));
+  return { ok: true, data: undefined };
+}
+
+// -----------------------------------------------------------------------------
+// deleteEmployee — hard delete from Clerk + DB.
+//
+// Refuses if the user has any historical transactions (sales / withdrawals /
+// expenses) — preserving audit trail trumps cleanliness. The admin can
+// always desactivate instead. Self-delete is blocked.
+// -----------------------------------------------------------------------------
+
+async function countUserHistory(userId: string): Promise<number> {
+  const db = getDb();
+  const [s, w, x] = await Promise.all([
+    db.select({ n: count() }).from(sales).where(eq(sales.createdBy, userId)),
+    db
+      .select({ n: count() })
+      .from(withdrawals)
+      .where(eq(withdrawals.createdBy, userId)),
+    db.select({ n: count() }).from(expenses).where(eq(expenses.createdBy, userId)),
+  ]);
+  return (s[0]?.n ?? 0) + (w[0]?.n ?? 0) + (x[0]?.n ?? 0);
+}
+
+export async function deleteEmployee(
+  userId: string,
+): Promise<EmployeeActionResult<void>> {
+  const gated = await gateAdmin();
+  if ('ok' in gated && gated.ok === false) return gated;
+  const session = (gated as { user: SessionUser }).user;
+
+  if (typeof userId !== 'string' || userId.length === 0) {
+    return { ok: false, error: 'validation_error', message: 'id_invalido' };
+  }
+  if (userId === session.userId) {
+    return {
+      ok: false,
+      error: 'self_edit_blocked',
+      message: 'No podés eliminar tu propia cuenta.',
+    };
+  }
+
+  const historyCount = await countUserHistory(userId);
+  if (historyCount > 0) {
+    return {
+      ok: false,
+      error: 'has_history',
+      message: `Este usuario tiene ${historyCount} ${
+        historyCount === 1 ? 'movimiento registrado' : 'movimientos registrados'
+      } (ventas, retiros o gastos). Para preservar el historial, sólo se puede desactivar.`,
+    };
+  }
+
+  // Delete from Clerk first. If it 404s the user is already gone — proceed.
+  const client = await clerkClient();
+  try {
+    await client.users.deleteUser(userId);
+  } catch (e) {
+    const isNotFound =
+      typeof e === 'object' &&
+      e !== null &&
+      // @ts-expect-error best-effort error shape inspection
+      (e.status === 404 || e.errors?.some((x: { code?: string }) => x.code === 'resource_not_found'));
+    if (!isNotFound) {
+      return { ok: false, error: 'clerk_error', message: clerkErrorMessage(e) };
+    }
+  }
+
+  const db = getDb();
+  try {
+    const deleted = await db
+      .delete(users)
+      .where(eq(users.id, userId))
+      .returning({ id: users.id });
+    if (deleted.length === 0) {
+      console.warn(`deleteEmployee: no local row for ${userId} (already gone)`);
+    }
+  } catch (e) {
+    console.error('deleteEmployee local delete failed:', e);
+    return {
+      ok: false,
+      error: 'internal_error',
+      message: 'Usuario eliminado en Clerk pero falló el borrado local.',
+    };
   }
 
   REVALIDATE_PATHS.forEach((p) => revalidatePath(p));

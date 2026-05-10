@@ -2,9 +2,10 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowUp, EyeOff } from 'lucide-react';
+import { ArrowUp, EyeOff, Trash2 } from 'lucide-react';
 
 import {
+  deleteEmployee,
   setEmployeeActive,
   setEmployeeRole,
   type EmployeeActionError,
@@ -21,6 +22,7 @@ const ERROR_LABELS: Record<EmployeeActionError, string> = {
   self_edit_blocked: 'No podés modificarte a vos mismo.',
   already_exists: 'Ya existe.',
   not_found: 'No encontrado.',
+  has_history: 'Tiene historial — no se puede eliminar.',
   clerk_error: 'Error de Clerk.',
   internal_error: 'Error interno.',
 };
@@ -39,6 +41,7 @@ export function EmployeeRow({ user, isSelf }: Props) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const onRoleChange = (role: Role) => {
     if (role === user.role) return;
@@ -61,6 +64,28 @@ export function EmployeeRow({ user, isSelf }: Props) {
     startTransition(async () => {
       const result = await setEmployeeActive(user.id, !user.isActive);
       if (!result.ok) {
+        setError(
+          (ERROR_LABELS[result.error] ?? 'Error.') +
+            (result.message ? ` — ${result.message}` : ''),
+        );
+      } else {
+        router.refresh();
+      }
+    });
+  };
+
+  const onDeleteClick = () => {
+    setError(null);
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      // Auto-cancel confirm after 6s if no follow-up click.
+      setTimeout(() => setConfirmingDelete(false), 6000);
+      return;
+    }
+    startTransition(async () => {
+      const result = await deleteEmployee(user.id);
+      if (!result.ok) {
+        setConfirmingDelete(false);
         setError(
           (ERROR_LABELS[result.error] ?? 'Error.') +
             (result.message ? ` — ${result.message}` : ''),
@@ -110,26 +135,64 @@ export function EmployeeRow({ user, isSelf }: Props) {
         </span>
       </td>
       <td className="px-3 py-3 text-right">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={onToggleActive}
-          disabled={isPending || isSelf}
-          title={isSelf ? 'No podés desactivarte a vos mismo' : undefined}
-        >
-          {user.isActive ? (
-            <>
-              <EyeOff className="mr-1 h-3 w-3" />
-              Desactivar
-            </>
-          ) : (
-            <>
-              <ArrowUp className="mr-1 h-3 w-3" />
-              Activar
-            </>
-          )}
-        </Button>
+        <div className="flex flex-col items-end gap-1.5 sm:flex-row sm:items-center sm:justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onToggleActive}
+            disabled={isPending || isSelf}
+            title={isSelf ? 'No podés desactivarte a vos mismo' : undefined}
+          >
+            {user.isActive ? (
+              <>
+                <EyeOff className="mr-1 h-3 w-3" />
+                Desactivar
+              </>
+            ) : (
+              <>
+                <ArrowUp className="mr-1 h-3 w-3" />
+                Activar
+              </>
+            )}
+          </Button>
+          {!isSelf &&
+            (confirmingDelete ? (
+              <div className="flex gap-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setConfirmingDelete(false)}
+                  disabled={isPending}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={onDeleteClick}
+                  disabled={isPending}
+                >
+                  <Trash2 className="mr-1 h-3 w-3" />
+                  {isPending ? 'Eliminando…' : 'Sí, eliminar'}
+                </Button>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onDeleteClick}
+                disabled={isPending}
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              >
+                <Trash2 className="mr-1 h-3 w-3" />
+                Eliminar
+              </Button>
+            ))}
+        </div>
       </td>
     </tr>
   );

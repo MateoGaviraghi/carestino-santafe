@@ -18,6 +18,7 @@ const ERROR_LABELS: Record<EmployeeActionError, string> = {
   self_edit_blocked: 'No podés modificarte a vos mismo.',
   already_exists: 'Ya existe un usuario con ese email.',
   not_found: 'No encontrado.',
+  has_history: 'Tiene historial — no se puede eliminar.',
   clerk_error: 'Error de Clerk.',
   internal_error: 'Error interno.',
 };
